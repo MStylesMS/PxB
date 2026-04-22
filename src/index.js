@@ -6,6 +6,8 @@ const logger = require('./util/logger');
 const { loadConfig } = require('./config/ini-loader');
 const { MqttClient } = require('./mqtt/client');
 const { Heartbeat } = require('./bridge/heartbeat');
+const { publishBridgeWarning } = require('./bridge/warnings');
+const { ZWaveDriver } = require('./radios/zwave/driver');
 
 // --- Argument parsing (minimal, no deps) ---
 function parseArgs(argv) {
@@ -49,17 +51,56 @@ async function main() {
     // --- MQTT client ---
     const mqtt = new MqttClient(config.mqtt);
 
+    // --- Z-Wave driver (constructed eagerly; started after MQTT is up) ---
+    let zwaveDriver = null;
+    if (config.zwave && config.zwave.enabled) {
+        zwaveDriver = new ZWaveDriver({
+            port: config.zwave.port,
+            cacheDir: config.zwave.cache_dir,
+            keys: {
+                s0:         config.zwave.network_key_s0,
+                s2_unauth:  config.zwave.network_key_s2_unauth,
+                s2_auth:    config.zwave.network_key_s2_auth,
+                s2_access:  config.zwave.network_key_s2_access,
+            },
+        });
+
+        zwaveDriver.on('warning', (w) => {
+            // Only publish if MQTT is connected; fall back to log-only otherwise.
+            publishBridgeWarning(mqtt, config.mqtt.base_topic, w);
+        });
+
+        zwaveDriver.on('state-changed', () => {
+            // Push an immediate heartbeat so Web UIs see transitions without waiting.
+            if (heartbeat) heartbeat.flush();
+        });
+    }
+
     // Build status generator for heartbeat
     function buildStatus(overrides = {}) {
+        const zwaveStatus = zwaveDriver
+            ? { ...zwaveDriver.getStatus() }
+            : (config.zwave ? { enabled: false } : { enabled: false });
+
+        // Derive overall bridge state from radio state(s)
+        let overall = 'ok';
+        if (zwaveDriver) {
+            const s = zwaveDriver.state;
+            if (s === 'starting')       overall = 'starting';
+            else if (s === 'degraded')  overall = 'degraded';
+            else if (s === 'error')     overall = 'degraded';
+            else if (s === 'stopped')   overall = 'starting';
+        }
+
         return {
             timestamp: new Date().toISOString(),
             pid: process.pid,
             uptime_s: Math.floor((Date.now() - startTime) / 1000),
-            state: 'ok',
+            state: overall,
             version: require('../package.json').version,
             host: require('os').hostname(),
             radios: {
-                zwave: config.zwave ? { enabled: config.zwave.enabled, connected: false, port: config.zwave.port, node_count: 0, last_error: null } : { enabled: false },
+                zwave: zwaveStatus,
                 zigbee: config.zigbee ? { enabled: config.zigbee.enabled, connected: false } : { enabled: false },
             },
             nodes: { total: Object.keys(config.nodes).length, ready: 0, failed: 0, interviewing: 0 },
@@ -76,8 +117,8 @@ async function main() {
         process.exit(1);
     }
 
-    // --- Heartbeat ---
-    const heartbeat = new Heartbeat(
+    // --- Heartbeat (declared here so the state-changed handler can see it) ---
+    let heartbeat = new Heartbeat(
         mqtt,
         config.mqtt.base_topic,
         config.global.heartbeat_interval,
@@ -85,9 +126,22 @@ async function main() {
     );
     heartbeat.start();
 
+    // --- Start Z-Wave driver (non-fatal: failures schedule reconnect) ---
+    if (zwaveDriver) {
+        try {
+            await zwaveDriver.start();
+        } catch (err) {
+            logger.error(`Z-Wave initial start failed (will retry): ${err.message}`);
+            // Driver has already scheduled a reconnect and published a warning.
+        }
+    }
+
     // --- Graceful shutdown ---
     async function shutdown(signal) {
         logger.info(`Received ${signal} — shutting down`);
+        if (zwaveDriver) {
+            try { await zwaveDriver.stop(); } catch (err) { logger.warn(`Z-Wave stop error: ${err.message}`); }
+        }
         heartbeat.flush({ state: 'stopping' });
         heartbeat.stop();
         await mqtt.disconnect();
@@ -98,7 +152,7 @@ async function main() {
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
 
-    logger.info('PZB ready — radio drivers not yet attached (Phase 1.2+)');
+    logger.info('PZB ready');
 }
 
 main();
