@@ -64,10 +64,10 @@ async function main() {
             port: config.zwave.port,
             cacheDir: config.zwave.cache_dir,
             keys: {
-                s0:         config.zwave.network_key_s0,
-                s2_unauth:  config.zwave.network_key_s2_unauth,
-                s2_auth:    config.zwave.network_key_s2_auth,
-                s2_access:  config.zwave.network_key_s2_access,
+                s0: config.zwave.network_key_s0,
+                s2_unauth: config.zwave.network_key_s2_unauth,
+                s2_auth: config.zwave.network_key_s2_auth,
+                s2_access: config.zwave.network_key_s2_access,
             },
         });
 
@@ -101,10 +101,10 @@ async function main() {
         let overall = 'ok';
         if (zwaveDriver) {
             const s = zwaveDriver.state;
-            if (s === 'starting')       overall = 'starting';
-            else if (s === 'degraded')  overall = 'degraded';
-            else if (s === 'error')     overall = 'degraded';
-            else if (s === 'stopped')   overall = 'starting';
+            if (s === 'starting') overall = 'starting';
+            else if (s === 'degraded') overall = 'degraded';
+            else if (s === 'error') overall = 'degraded';
+            else if (s === 'stopped') overall = 'starting';
         }
 
         return {
@@ -144,12 +144,13 @@ async function main() {
     // --- Bridge command handler (must come after heartbeat so buildStatus is ready) ---
     // eslint-disable-next-line no-unused-vars
     const commandHandler = new BridgeCommandHandler({
-        mqttClient:     mqtt,
-        baseTopic:      config.mqtt.base_topic,
-        getStatus:      buildStatus,
+        mqttClient: mqtt,
+        baseTopic: config.mqtt.base_topic,
+        getStatus: buildStatus,
         publishWarning: (w) => publishBridgeWarning(mqtt, config.mqtt.base_topic, w),
     });
- (non-fatal: failures schedule reconnect) ---
+
+    // --- Z-Wave startup (non-fatal: failures schedule reconnect) ---
     if (zwaveDriver) {
         try {
             await zwaveDriver.start();

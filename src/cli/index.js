@@ -65,7 +65,10 @@ async function cmdStatus(args) {
         process.exit(1);
     }
 
-    const mqtt = new MqttClient(config.mqtt);
+    const mqtt = new MqttClient({
+        ...config.mqtt,
+        client_id: `${config.mqtt.client_id}-cli`,
+    });
     const timeoutMs = args.timeout || 5000;
     const topics = bridgeTopics(config.mqtt.base_topic);
 
