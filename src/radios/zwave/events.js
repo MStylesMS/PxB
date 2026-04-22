@@ -19,14 +19,14 @@ class ZWaveEvents {
      * @param {import('../../mqtt/client').MqttClient}             opts.mqttClient
      */
     constructor({ zwaveDriver, nodeRegistry, mqttClient }) {
-        this._driver   = zwaveDriver;
+        this._driver = zwaveDriver;
         this._registry = nodeRegistry;
-        this._mqtt     = mqttClient;
+        this._mqtt = mqttClient;
 
-        this._driver.on('node-value-updated',   (ev) => this._onValueUpdated(ev));
-        this._driver.on('node-status-changed',  (ev) => this._onStatusChanged(ev));
-        this._driver.on('connected',            ()   => this._onDriverConnected());
-        this._driver.on('disconnected',         ()   => this._onDriverDisconnected());
+        this._driver.on('node-value-updated', (ev) => this._onValueUpdated(ev));
+        this._driver.on('node-status-changed', (ev) => this._onStatusChanged(ev));
+        this._driver.on('connected', () => this._onDriverConnected());
+        this._driver.on('disconnected', () => this._onDriverDisconnected());
     }
 
     // --- Driver lifecycle ---
@@ -88,25 +88,14 @@ class ZWaveEvents {
         }
 
         const source = `zwave-node-${nodeId}`;
-        const ts = Date.now();
+        const ts = new Date().toISOString();
 
-        const eventPayload = {
-            input:  entry.input_channel,
-            event:  normalized,
-            source,
-            ts,
-            raw: {
-                commandClass,
-                property,
-                propertyKey: propertyKey ?? null,
-                newValue,
-                oldValue: oldValue ?? null,
-            },
-        };
+        const eventPayload = { event: normalized };
+        const lastEvent = { event: normalized, ts, source };
 
         // Update signal (returns whether value changed)
         const { changed } = this._registry.updateSignal(entry.label, 'contact', normalized);
-        this._registry.setLastEvent(entry.label, eventPayload);
+        this._registry.setLastEvent(entry.label, lastEvent);
 
         if (changed) {
             logger.info(`Node "${entry.label}" contact → ${normalized} (CC ${commandClass}/${property}=${newValue})`);
@@ -130,15 +119,7 @@ class ZWaveEvents {
         const entry = this._registry.getByLabel(label);
         if (!entry) return;
         const topics = nodeTopics(entry.base_topic);
-        const state = {
-            timestamp:  new Date().toISOString(),
-            label:      entry.label,
-            radio:      entry.radio,
-            type:       entry.type,
-            status:     entry.status,
-            last_event: entry.last_event,
-            signals:    entry.signals,
-        };
+        const state = entry.last_event || { event: null, ts: null, source: null };
         this._mqtt.publish(topics.state, state, { retain: true });
     }
 }

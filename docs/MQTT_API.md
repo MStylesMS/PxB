@@ -118,20 +118,20 @@ A companion INI fragment is written to disk (see `ini_fragment_path`).
 Retained. Only published when an event actually changes observable state (de-duplication on identical consecutive events is optional but recommended).
 
 ```json
-{
-  "input": "0",
-  "event": "open",
-  "source": "zwave-node-3",
-  "ts": 1776900000000,
-  "raw": { "commandClass": 113, "property": "Access Control", "newValue": 22 }
-}
+{ "event": "open" }
 ```
 
-Event token vocabulary is defined in [SPEC.md § 10](SPEC.md#10-event-schema-normalized).
+Event token vocabulary: `open` | `close`.
 
 ## 8. Per-Node State (`{node.base_topic}/state`)
 
-Retained. Only published when any signal changes. See [SPEC.md § 11](SPEC.md#11-state-schema) for shape.
+Retained. Only published when any signal changes (or on driver disconnect). Reflects the most recent event.
+
+```json
+{ "event": "open", "ts": "2026-04-22T23:10:36.936Z", "source": "zwave-node-3" }
+```
+
+Before any event has been received: `{ "event": null, "ts": null, "source": null }`.
 
 ## 9. Per-Node Commands (`{node.base_topic}/commands`)
 
@@ -156,7 +156,7 @@ Standard codes:
 
 ## 11. Compatibility with PFx
 
-The event payload shape is intentionally identical to what `PFx InputZone` already accepts, so an existing PFx `input_topic` pointing at `{node.base_topic}/events` works with zero PFx changes.
+The `events` payload intentionally uses the minimal `{"event":"open"|"close"}` shape. PFx `InputZone` in MQTT consumer mode only requires the `event` field, so an existing PFx `input_topic` pointing at `{node.base_topic}/events` works with zero PFx changes.
 
 ## 12. Versioning
 
