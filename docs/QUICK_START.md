@@ -1,7 +1,5 @@
 # PZB Quick Start
 
-**Status:** Placeholder — content finalizes when phase 1 code lands. This outlines the intended flow.
-
 ## 1. Install
 
 ```bash
@@ -9,29 +7,55 @@ cd /opt/paradox/apps/PZB
 npm install
 ```
 
+> **Requires Node.js 18+ and a working zwave-js-compatible USB stick.**
+
 ## 2. Identify Your Radio
+
+Always use a stable symlink — never `/dev/ttyUSBn` (enumeration order varies):
 
 ```bash
 ls -l /dev/serial/by-id/
-# pick the stable symlink for your Z-Wave stick, e.g.:
-#   usb-Silicon_Labs_HubZ_Smart_Home_Controller_516000D0-if00-port0
+# Example output:
+#   usb-Silicon_Labs_HubZ_Smart_Home_Controller_516000D0-if00-port0 -> ../../ttyUSB0
 ```
 
 ## 3. Create a Config
 
-Start from the template in [CONFIG_INI.md](CONFIG_INI.md). Save as `/opt/paradox/config/pzb.ini`.
+Save as `/opt/paradox/config/pzb.ini`.
 
-Minimal bootable config (no nodes yet):
+**Minimal bootable config** (no nodes, no security keys):
 
 ```ini
 [mqtt]
-broker = localhost
-client_id = pzb-host
+broker     = localhost
+client_id  = pzb-houdini
 base_topic = paradox/houdini
 
 [zwave]
 port = /dev/serial/by-id/usb-Silicon_Labs_HubZ_Smart_Home_Controller_516000D0-if00-port0
 ```
+
+**With a configured contact sensor:**
+
+```ini
+[mqtt]
+broker     = localhost
+client_id  = pzb-houdini
+base_topic = paradox/houdini
+
+[zwave]
+port              = /dev/serial/by-id/usb-Silicon_Labs_HubZ_Smart_Home_Controller_516000D0-if00-port0
+network_key_s0    = 0xAABBCCDDEEFF00112233445566778899
+network_key_s2_unauth = 0x...
+
+[node:spell-box]
+radio      = zwave
+node_id    = 3
+type       = contact
+base_topic = paradox/houdini/zwave/spell-box
+```
+
+See [CONFIG_INI.md](CONFIG_INI.md) for the full key reference.
 
 ## 4. First Run (Dev)
 
@@ -45,63 +69,88 @@ Watch the bridge status:
 mosquitto_sub -v -t 'paradox/houdini/pzb/#'
 ```
 
-You should see a retained `pzb/status` message every 10s.
+You should see a retained `pzb/status` message within 10 seconds.
 
-## 5. Include a Device
+## 5. CLI Commands (Phase 1)
 
-Via MQTT:
+```bash
+# Print current bridge status (reads retained MQTT message)
+node src/cli/index.js status --config /opt/paradox/config/pzb.ini
+
+# List all configured nodes (reads config file only, no broker needed)
+node src/cli/index.js list-nodes --config /opt/paradox/config/pzb.ini
+
+# Show help
+node src/cli/index.js help
+```
+
+If PZB is installed globally via `npm link` or the `pzb` binary is in PATH:
+
+```bash
+pzb status     --config /opt/paradox/config/pzb.ini
+pzb list-nodes --config /opt/paradox/config/pzb.ini
+```
+
+## 6. Force a Status Publish (MQTT Command)
 
 ```bash
 mosquitto_pub -t paradox/houdini/pzb/commands \
-  -m '{"command":"startInclusion","radio":"zwave","label":"spell-box"}'
+  -m '{"command":"getNetworkStatus"}'
 ```
 
-Or via CLI:
+PZB will immediately re-publish the current `pzb/status` payload.
 
-```bash
-./src/cli/index.js include --label spell-box
-```
+## 7. Verify Contact Sensor Events
 
-Trigger the physical inclusion on the device (button, magnet tap). PZB will:
-- emit a retained discovery notice on `paradox/houdini/pzb/discovered/zwave/<nodeId>`
-- append an INI fragment to `discovered.ini` next to your main config
-- start publishing events for the node under a temporary `discovered-<n>` topic
-
-## 6. Finalize the Device
-
-Copy the fragment from `discovered.ini` into your main config, edit the placeholders (`type`, `base_topic`, `label`), then restart PZB.
-
-## 7. Verify
+Actuate a configured contact sensor (open/close). Check:
 
 ```bash
 mosquitto_sub -v -t 'paradox/houdini/zwave/spell-box/#'
 ```
 
-Actuate the sensor and confirm `events` and `state` messages appear.
+Expected messages:
+- `paradox/houdini/zwave/spell-box/events` — `{"input":"0","event":"open","source":"zwave-node-3",...}`
+- `paradox/houdini/zwave/spell-box/state`  — node state snapshot (retained)
 
 ## 8. Install as a Systemd Service
 
-```
-[Unit]
-Description=Paradox Z Bridge
-After=network-online.target mosquitto.service
-Wants=network-online.target
-Requires=mosquitto.service
+Copy the bundled template:
 
-[Service]
-Type=simple
-User=paradox
-WorkingDirectory=/opt/paradox/apps/PZB
-ExecStart=/usr/bin/node /opt/paradox/apps/PZB/src/index.js --config /opt/paradox/config/pzb.ini
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
+```bash
+sudo cp /opt/paradox/apps/PZB/config/systemd/pzb.service /etc/systemd/system/pzb.service
+# Edit ExecStart and --config path if your config is in a different location
+sudo nano /etc/systemd/system/pzb.service
 ```
+
+Then enable and start:
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now pzb
 sudo systemctl status pzb
 ```
+
+Check logs:
+
+```bash
+journalctl -u pzb -f
+```
+
+## 9. Serial Port Permission
+
+On Raspberry Pi OS the `paradox` user must be in the `dialout` group:
+
+```bash
+sudo usermod -aG dialout paradox
+# Log out and back in (or reboot) for the change to take effect
+```
+
+## 10. Troubleshooting
+
+| Symptom | Check |
+|---------|-------|
+| `Config file not found` | Verify `--config` path is absolute or correct relative path |
+| `pzb/status` never appears | Confirm `broker` and `base_topic` in INI match what you subscribe to |
+| Z-Wave driver fails to start | Check `port` path exists and the user has read/write access |
+| Node events missing | Confirm `node_id` in INI matches the Z-Wave controller's assignment |
+| `ZWAVE_DRIVER_ERROR` warnings | Non-fatal; driver will reconnect with exponential backoff |

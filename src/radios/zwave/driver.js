@@ -155,7 +155,9 @@ class ZWaveDriver extends EventEmitter {
             this._lastError = null;
             this._setState('connected');
             logger.info(`Z-Wave driver ready — ${this.nodeCount} node(s) known`);
-            this.emit('connected');
+            // Subscribe to per-node value updates now that the controller is ready.
+            this._subscribeNodeEvents(driver);
+            this.emit('connected', driver);
         });
 
         driver.on('error', (err) => {
@@ -172,12 +174,59 @@ class ZWaveDriver extends EventEmitter {
             if (this._state === 'connected') this._setState('degraded');
         });
 
+        // Hook newly included nodes so we start receiving their value updates immediately.
+        driver.on('node added', (node) => {
+            this._subscribeNode(node);
+        });
+
         // zwave-js emits 'driver ready' once. For serial disconnect scenarios, it
         // destroys the driver and we must rebuild. We hook 'all nodes ready' as a
         // benign info marker and detect disconnect via start() rejection and
         // an explicit 'destroy' surfacing through error.
         driver.on('all nodes ready', () => {
             logger.info('Z-Wave all nodes ready');
+        });
+    }
+
+    /** Subscribe to value-update and status events for every known node. */
+    _subscribeNodeEvents(driver) {
+        for (const [, node] of driver.controller.nodes) {
+            this._subscribeNode(node);
+        }
+    }
+
+    /** Subscribe to a single zwave-js node's events and forward them. */
+    _subscribeNode(node) {
+        node.on('value updated', (n, args) => {
+            this.emit('node-value-updated', {
+                nodeId:           n.id,
+                commandClass:     args.commandClass,
+                commandClassName: args.commandClassName,
+                property:         args.propertyName ?? args.property,
+                propertyKey:      args.propertyKey,
+                newValue:         args.newValue,
+                oldValue:         args.oldValue,
+            });
+        });
+
+        node.on('interview completed', (n) => {
+            logger.info(`Z-Wave node ${n.id} interview completed`);
+            this.emit('node-status-changed', { nodeId: n.id, status: 'ready' });
+        });
+
+        node.on('interview failed', (n, args) => {
+            logger.warn(`Z-Wave node ${n.id} interview failed: ${args?.errorMessage || 'unknown'}`);
+            this.emit('node-status-changed', { nodeId: n.id, status: 'failed' });
+        });
+
+        node.on('dead', (n) => {
+            logger.warn(`Z-Wave node ${n.id} is dead`);
+            this.emit('node-status-changed', { nodeId: n.id, status: 'failed' });
+        });
+
+        node.on('alive', (n) => {
+            logger.info(`Z-Wave node ${n.id} is alive`);
+            this.emit('node-status-changed', { nodeId: n.id, status: 'ready' });
         });
     }
 

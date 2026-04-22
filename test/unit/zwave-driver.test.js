@@ -11,16 +11,23 @@ const { ZWaveDriver } = require('../../src/radios/zwave/driver');
  *   - If `startBehavior` is 'reject':  start() rejects with provided error.
  *   - If `startBehavior` is 'throw':   constructor throws.
  */
+class MockNode extends EventEmitter {
+    constructor(id) {
+        super();
+        this.id = id;
+    }
+}
+
 class MockDriver extends EventEmitter {
     constructor(port, opts, behavior) {
         super();
-        this._port = port;
-        this._opts = opts;
+        this._port     = port;
+        this._opts     = opts;
         this._behavior = behavior;
         this.destroyed = false;
 
-        // Minimal controller shape for nodeCount
-        this.controller = { nodes: new Map([[1, { id: 1 }]]) };
+        // Minimal controller shape with EventEmitter-based nodes
+        this.controller = { nodes: new Map([[1, new MockNode(1)]]) };
     }
 
     start() {

@@ -7,7 +7,10 @@ const { loadConfig } = require('./config/ini-loader');
 const { MqttClient } = require('./mqtt/client');
 const { Heartbeat } = require('./bridge/heartbeat');
 const { publishBridgeWarning } = require('./bridge/warnings');
+const { NodeRegistry } = require('./bridge/node-registry');
+const { BridgeCommandHandler } = require('./bridge/command-handler');
 const { ZWaveDriver } = require('./radios/zwave/driver');
+const { ZWaveEvents } = require('./radios/zwave/events');
 
 // --- Argument parsing (minimal, no deps) ---
 function parseArgs(argv) {
@@ -51,6 +54,9 @@ async function main() {
     // --- MQTT client ---
     const mqtt = new MqttClient(config.mqtt);
 
+    // --- Node registry (always constructed; tracks runtime node state) ---
+    const nodeRegistry = new NodeRegistry(config.nodes);
+
     // --- Z-Wave driver (constructed eagerly; started after MQTT is up) ---
     let zwaveDriver = null;
     if (config.zwave && config.zwave.enabled) {
@@ -74,6 +80,15 @@ async function main() {
             // Push an immediate heartbeat so Web UIs see transitions without waiting.
             if (heartbeat) heartbeat.flush();
         });
+    }
+
+    // --- ZWaveEvents: wires driver → registry → MQTT (constructed after driver + registry) ---
+    // eslint-disable-next-line no-unused-vars
+    let zwaveEvents = null;
+    if (zwaveDriver) {
+        // Events object is constructed here; it attaches listeners to the driver.
+        // A local reference is kept to prevent GC during the process lifetime.
+        zwaveEvents = new ZWaveEvents({ zwaveDriver, nodeRegistry, mqttClient: mqtt });
     }
 
     // Build status generator for heartbeat
@@ -103,7 +118,7 @@ async function main() {
                 zwave: zwaveStatus,
                 zigbee: config.zigbee ? { enabled: config.zigbee.enabled, connected: false } : { enabled: false },
             },
-            nodes: { total: Object.keys(config.nodes).length, ready: 0, failed: 0, interviewing: 0 },
+            nodes: nodeRegistry.getSummary(),
             inclusion: { active: false, radio: null, started_at: null },
             ...overrides,
         };
@@ -126,7 +141,15 @@ async function main() {
     );
     heartbeat.start();
 
-    // --- Start Z-Wave driver (non-fatal: failures schedule reconnect) ---
+    // --- Bridge command handler (must come after heartbeat so buildStatus is ready) ---
+    // eslint-disable-next-line no-unused-vars
+    const commandHandler = new BridgeCommandHandler({
+        mqttClient:     mqtt,
+        baseTopic:      config.mqtt.base_topic,
+        getStatus:      buildStatus,
+        publishWarning: (w) => publishBridgeWarning(mqtt, config.mqtt.base_topic, w),
+    });
+ (non-fatal: failures schedule reconnect) ---
     if (zwaveDriver) {
         try {
             await zwaveDriver.start();

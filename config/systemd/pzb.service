@@ -1,0 +1,43 @@
+[Unit]
+Description=Paradox Z Bridge (PZB)
+Documentation=https://github.com/MStylesMS/PZB
+After=network-online.target mosquitto.service
+Wants=network-online.target
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User=paradox
+Group=paradox
+# Give the paradox user access to the serial port (dialout group required on most distros)
+SupplementaryGroups=dialout
+
+WorkingDirectory=/opt/paradox/apps/PZB
+
+# Path to config — override via a drop-in or edit directly
+ExecStart=/usr/bin/node /opt/paradox/apps/PZB/src/index.js \
+    --config /opt/paradox/config/pzb.ini \
+    --log-level info
+
+# Graceful shutdown: SIGTERM first, then SIGKILL after 10s
+TimeoutStopSec=10
+KillMode=process
+
+Restart=always
+RestartSec=5
+
+# Resource limits
+LimitNOFILE=4096
+
+# Security hardening (relaxed enough for serial + MQTT)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+# Do NOT set ProtectHome=true — config may live in /home or /opt
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pzb
+
+[Install]
+WantedBy=multi-user.target
