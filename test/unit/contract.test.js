@@ -5,7 +5,7 @@ const { bridgeTopics, nodeTopics } = require('../../src/mqtt/contract');
 describe('bridgeTopics', () => {
   const bt = bridgeTopics('paradox/houdini');
 
-  test('status topic', () => expect(bt.status).toBe('paradox/houdini/pzb/status'));
+  test('state topic', () => expect(bt.state).toBe('paradox/houdini/pzb/state'));
   test('commands topic', () => expect(bt.commands).toBe('paradox/houdini/pzb/commands'));
   test('warnings topic', () => expect(bt.warnings).toBe('paradox/houdini/pzb/warnings'));
   test('discoveredRoot',  () => expect(bt.discoveredRoot).toBe('paradox/houdini/pzb/discovered'));

@@ -54,7 +54,7 @@ class ZWaveEvents {
     _onStatusChanged({ nodeId, status }) {
         const entry = this._registry.getByZWaveId(nodeId);
         if (!entry) {
-            logger.debug(`Z-Wave status update for unconfigured node ${nodeId} (${status}) — ignored`);
+            logger.info(`Signal zwave-node-${nodeId} status=${status} (unconfigured)`);
             return;
         }
         const prev = entry.status;
@@ -98,16 +98,23 @@ class ZWaveEvents {
 
     _onValueUpdated({ nodeId, commandClass, property, propertyKey, newValue, oldValue }) {
         const entry = this._registry.getByZWaveId(nodeId);
+        const propertyLabel = propertyKey === undefined ? property : `${property}:${propertyKey}`;
+        const rawValue = JSON.stringify(newValue);
+
         if (!entry) {
-            logger.debug(
-                `Z-Wave value update for unconfigured node ${nodeId} CC ${commandClass} — ignored`
+            logger.info(
+                `Signal zwave-node-${nodeId} CC=${commandClass} property=${propertyLabel} value=${rawValue} (unconfigured)`
             );
             return;
         }
 
+        logger.info(
+            `Signal zwave-node-${nodeId} node=${entry.label} CC=${commandClass} property=${propertyLabel} value=${rawValue} (configured)`
+        );
+
         // Only process contact/sensor types in phase 1
         if (entry.type !== 'contact') {
-            logger.debug(`Node "${entry.label}" type=${entry.type} — value update not handled in phase 1`);
+            logger.info(`Node "${entry.label}" type=${entry.type} — signal observed but not published in phase 1`);
             return;
         }
 
@@ -145,6 +152,7 @@ class ZWaveEvents {
         if (!entry) return;
         const topics = nodeTopics(entry.base_topic);
         this._mqtt.publish(topics.events, payload, { retain: true });
+        logger.info(`MQTT publish ${topics.events} ${JSON.stringify(payload)}`);
     }
 
     _publishState(label) {
@@ -153,6 +161,7 @@ class ZWaveEvents {
         const topics = nodeTopics(entry.base_topic);
         const state = entry.last_event || { event: null, ts: null, source: null };
         this._mqtt.publish(topics.state, state, { retain: true });
+        logger.info(`MQTT publish ${topics.state} ${JSON.stringify(state)}`);
     }
 
     /** Public: force-publish the current state for the given registry entry. */

@@ -51,7 +51,7 @@ describe('ZWaveInclusion', () => {
         const ok = await inc.startInclusion();
         expect(ok).toBe(true);
         expect(inc.state).toBe('including');
-        expect(driver.beginCalls).toEqual([{ kind: 'inclusion', opts: { strategy: 0 } }]);
+        expect(driver.beginCalls).toEqual([{ kind: 'inclusion', opts: { strategy: 2 } }]);
         const status = inc.getStatus();
         expect(status.active).toBe(true);
         expect(status.mode).toBe('inclusion');

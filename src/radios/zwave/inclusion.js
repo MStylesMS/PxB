@@ -13,7 +13,7 @@ const logger = require('../../util/logger');
  *     `beginExclusion()` calls with a sane default strategy.
  *   - Arm a timeout; if it elapses with no result, call stopInclusion/stopExclusion
  *     and emit a TIMEOUT warning.
- *   - Surface current state for the heartbeat `pzb/status.inclusion` block.
+ *   - Surface current state for the heartbeat `pzb/state.inclusion` block.
  *
  * Events emitted:
  *   'state-changed' (newState, prevState)
@@ -77,7 +77,7 @@ class ZWaveInclusion extends EventEmitter {
      * @param {number} [opts.timeoutMs]
      */
     async startInclusion(opts = {}) {
-        return this._begin('inclusion', opts.timeoutMs);
+        return this._begin('inclusion', opts.timeoutMs, opts.strategy);
     }
 
     async startExclusion(opts = {}) {
@@ -92,7 +92,7 @@ class ZWaveInclusion extends EventEmitter {
         return this._stop('exclusion');
     }
 
-    async _begin(mode, timeoutMs) {
+    async _begin(mode, timeoutMs, strategy) {
         if (this._state !== 'idle') {
             logger.warn(`Inclusion: cannot start ${mode} — already ${this._state}`);
             this.emit('warning', {
@@ -116,10 +116,15 @@ class ZWaveInclusion extends EventEmitter {
 
         const effectiveTimeout = timeoutMs || this._defaultTimeoutMs;
         try {
-            // InclusionStrategy.Default = 0 (prefers S2, falls back to Insecure).
-            // We pass the numeric strategy to avoid re-importing the enum.
+            // InclusionStrategy: 0=Default (prefers S2), 2=Insecure, 3=S0, 4=S2.
+            // We default to Insecure (2) because S2 bootstrap requires
+            // `inclusionUserCallbacks` (grantSecurityClasses, validateDSKAndEnterPIN,
+            // abort) which PZB does not yet wire up — without them zwave-js aborts
+            // S2 and the node is left half-included and unreachable.
+            // Caller may override via MQTT payload { "strategy": 4 } once callbacks are added.
             if (mode === 'inclusion') {
-                await controller.beginInclusion({ strategy: 0 });
+                const strat = Number.isInteger(strategy) ? strategy : 2;
+                await controller.beginInclusion({ strategy: strat });
             } else {
                 await controller.beginExclusion();
             }

@@ -49,6 +49,10 @@ async function main() {
     // Apply log level (args override config)
     const logLevel = args.logLevel || config.global.log_level || 'info';
     logger.setLevel(logLevel);
+    logger.configure({
+        logDirectory: config.global.log_directory || null,
+        logFilePrefix: 'pzb',
+    });
 
     logger.info(`PZB starting — config: ${path.resolve(args.config)}`);
     logger.info(`Nodes configured: ${Object.keys(config.nodes).join(', ') || '(none)'}`);
@@ -232,6 +236,7 @@ async function main() {
         heartbeat.stop();
         await mqtt.disconnect();
         logger.info('PZB stopped');
+        logger.close();
         process.exit(0);
     }
 

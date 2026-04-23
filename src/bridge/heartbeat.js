@@ -12,7 +12,7 @@ class Heartbeat {
      */
     constructor(mqttClient, baseTopic, intervalSec, getStatus) {
         this._mqtt = mqttClient;
-        this._topic = bridgeTopics(baseTopic).status;
+        this._topic = bridgeTopics(baseTopic).state;
         this._interval = intervalSec * 1000;
         this._getStatus = getStatus;
         this._timer = null;

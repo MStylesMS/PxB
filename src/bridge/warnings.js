@@ -21,7 +21,10 @@ function publishBridgeWarning(mqttClient, baseTopic, { severity = 'warn', code, 
         context,
     };
     mqttClient.publish(topic, payload, { retain: false });
-    logger[severity === 'error' ? 'error' : 'warn'](`BridgeWarning ${code}: ${message}`);
+    const level = severity === 'error'
+        ? 'error'
+        : (severity === 'info' ? 'info' : 'warn');
+    logger[level](`BridgeWarning ${code}: ${message}`);
 }
 
 module.exports = { publishBridgeWarning };

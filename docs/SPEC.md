@@ -70,10 +70,10 @@ See [CONFIG_INI.md](CONFIG_INI.md) for full key list.
 See [MQTT_API.md](MQTT_API.md) for canonical definitions. Summary:
 
 - Per node: `{base_topic}/events`, `/state`, `/commands`, `/warnings`.
-- Bridge: `{base_topic}/pzb/status`, `/commands`, `/warnings`, `/discovered/<radio>/<id>`.
+- Bridge: `{base_topic}/pzb/state`, `/commands`, `/warnings`, `/discovered/<radio>/<id>`.
 
 Retention rules:
-- Bridge `pzb/status`: **retained**, periodic (default 10s).
+- Bridge `pzb/state`: **retained**, periodic (default 10s).
 - Node `events` and `state`: **retained**, **on-change only**.
 - Node `commands` and `warnings`, bridge `commands` and `warnings`: **not retained**.
 - Discovery notices: **retained**.
@@ -145,7 +145,7 @@ All commands must be accepted both via MQTT JSON and via the equivalent CLI (`pz
 ## 14. Discovery / Pairing
 
 1. Operator starts inclusion via MQTT or `pzb include [--label <name>]`.
-2. Bridge enters `including` state, reflected in `pzb/status`.
+2. Bridge enters `including` state, reflected in `pzb/state`.
 3. When a node joins, PZB interviews it.
 4. On successful interview:
    - Retained discovery notice published on `{base_topic}/pzb/discovered/<radio>/<id>`.
@@ -188,7 +188,23 @@ Warnings are JSON: `{ "timestamp", "severity": "info|warn|error", "code", "messa
 - Web UI.
 - TLS, ACL enforcement on MQTT.
 
-## 19. References
+## 19. Supported Devices
+
+This section tracks real-world device validation for PZB. Device profile documents live in `docs/supported/` and include pairing and operations notes.
+
+### 19.1 Z-Wave Devices
+
+| Vendor | Model | Device Type | Validation Status | Profile |
+|--------|-------|-------------|-------------------|---------|
+| Zooz | ZSE41 800LR Open/Close XS Sensor | Contact sensor | Active validation in this environment; known-good model family for ZSE41 support path | [Zooz ZSE41 800LR](supported/zooz-zse41-800lr.md) |
+
+### 19.2 Zigbee Devices
+
+| Vendor | Model | Device Type | Validation Status | Profile |
+|--------|-------|-------------|-------------------|---------|
+| Third Reality | 3RDS17BZ Door Sensor | Contact sensor | Planned for next phase (not yet validated in PZB) | [Third Reality 3RDS17BZ](supported/third-reality-3rds17bz.md) |
+
+## 20. References
 
 - [CONFIG_INI.md](CONFIG_INI.md)
 - [MQTT_API.md](MQTT_API.md)

@@ -87,7 +87,7 @@ Per configured node:
 - `{base_topic}/warnings` — per-node warnings (not retained)
 
 Bridge-level:
-- `{base_topic}/pzb/status` — retained heartbeat every `heartbeat_interval` seconds
+- `{base_topic}/pzb/state` — retained heartbeat every `heartbeat_interval` seconds
 - `{base_topic}/pzb/commands` — bridge-level commands (inclusion, diagnostics)
 - `{base_topic}/pzb/warnings` — bridge-level warnings (radio disconnect, driver errors)
 - `{base_topic}/pzb/discovered/<radio>/<id>` — retained discovery notices for unconfigured nodes
@@ -109,7 +109,7 @@ Full detail in [docs/MQTT_API.md](docs/MQTT_API.md).
 ## Pairing / Discovery Flow
 
 1. Operator sends `{"command":"startInclusion"}` on `{base_topic}/pzb/commands` (or runs `pzb include --label spell-box`).
-2. PZB enters inclusion mode and publishes progress on `{base_topic}/pzb/status` (phase: `including`).
+2. PZB enters inclusion mode and publishes progress on `{base_topic}/pzb/state` (phase: `including`).
 3. Operator triggers the device to join (physical button / magnet tap).
 4. PZB completes interview, assigns a default label (`discovered-<nodeId>` if none provided) and:
    - publishes a discovery notice on `{base_topic}/pzb/discovered/zwave/<nodeId>`
@@ -175,7 +175,7 @@ Node-level (`{base_topic:node}/commands`) for outputs:
 
 ## Lifecycle & Failure Semantics
 
-- Missing serial port at startup → publish `pzb/status` with `state: error`, exit with non-zero so systemd restarts.
+- Missing serial port at startup → publish `pzb/state` with `state: error`, exit with non-zero so systemd restarts.
 - Radio disconnect at runtime → `state: degraded`, attempt reconnect with backoff; publish warnings.
 - Node reports failed → mark in registry; publish warning; keep trying until `removeFailedNode`.
 - Graceful shutdown on SIGTERM: stop inclusion, close driver, publish `state: stopping`, disconnect MQTT last.

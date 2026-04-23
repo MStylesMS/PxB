@@ -30,12 +30,12 @@ function makeSetup(overrides = {}) {
 }
 
 describe('BridgeCommandHandler: getNetworkStatus', () => {
-    test('publishes status to pzb/status with retain:true', () => {
+    test('publishes state to pzb/state with retain:true', () => {
         const { published, deliver } = makeSetup();
         deliver({ command: 'getNetworkStatus' });
         expect(published).toHaveLength(1);
         const { topic, payload, opts } = published[0];
-        expect(topic).toBe('paradox/test/pzb/status');
+        expect(topic).toBe('paradox/test/pzb/state');
         expect(payload.state).toBe('ok');
         expect(opts.retain).toBe(true);
     });

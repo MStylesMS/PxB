@@ -28,7 +28,7 @@ The per-node segment is **fully operator-defined** via INI. Example: `paradox/ho
 
 | Topic | Retained | Frequency |
 |-------|:--------:|-----------|
-| `pzb/status` | yes | Every `heartbeat_interval` (default 10s) |
+| `pzb/state` | yes | Every `heartbeat_interval` (default 10s) |
 | `pzb/commands` | no | On demand |
 | `pzb/warnings` | no | On demand |
 | `pzb/discovered/...` | yes | On discovery |
@@ -37,7 +37,7 @@ The per-node segment is **fully operator-defined** via INI. Example: `paradox/ho
 | `<node>/commands` | no | On demand |
 | `<node>/warnings` | no | On demand |
 
-## 3. Bridge Status (`pzb/status`)
+## 3. Bridge State (`pzb/state`)
 
 Retained. Republished every `heartbeat_interval` seconds.
 
@@ -66,13 +66,13 @@ Not retained. Payloads:
 
 | Command | Payload | Description |
 |---------|---------|-------------|
-| `startInclusion` | `{ "command":"startInclusion", "radio":"zwave", "label":"<optional>" }` | Enter inclusion mode on given radio. |
+| `startInclusion` | `{ "command":"startInclusion", "radio":"zwave", "label":"<optional>", "strategy":<int>, "timeout_s":<int> }` | Enter inclusion mode on given radio. `strategy` is a zwave-js `InclusionStrategy` (`0`=Default/prefers S2, `2`=Insecure, `3`=S0, `4`=S2). **Defaults to `2` (Insecure)** because S2 bootstrap requires user callbacks that PZB does not yet provide; omit `strategy` for the safe default. |
 | `stopInclusion` | `{ "command":"stopInclusion", "radio":"zwave" }` | Exit inclusion mode. |
 | `startExclusion` | `{ "command":"startExclusion", "radio":"zwave" }` | Enter exclusion mode. |
 | `stopExclusion` | `{ "command":"stopExclusion", "radio":"zwave" }` | Exit exclusion mode. |
 | `refreshNode` | `{ "command":"refreshNode", "node_id":3 }` | Re-interview a node. |
 | `removeFailedNode` | `{ "command":"removeFailedNode", "node_id":3 }` | Remove a failed Z-Wave node from the controller. |
-| `getNetworkStatus` | `{ "command":"getNetworkStatus" }` | Force-publish `pzb/status` immediately. |
+| `getNetworkStatus` | `{ "command":"getNetworkStatus" }` | Force-publish `pzb/state` immediately. |
 
 ## 5. Bridge Warnings (`pzb/warnings`)
 
@@ -166,4 +166,4 @@ The `events` payload intentionally uses the minimal `{"event":"open"|"close"}` s
 
 ## 12. Versioning
 
-`pzb/status.version` reflects PZB's semantic version. API-breaking changes require a bump and a migration note in this document.
+`pzb/state.version` reflects PZB's semantic version. API-breaking changes require a bump and a migration note in this document.

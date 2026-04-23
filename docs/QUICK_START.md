@@ -69,7 +69,7 @@ Watch the bridge status:
 mosquitto_sub -v -t 'paradox/houdini/pzb/#'
 ```
 
-You should see a retained `pzb/status` message within 10 seconds.
+You should see a retained `pzb/state` message within 10 seconds.
 
 ## 5. CLI Commands (Phase 1)
 
@@ -98,7 +98,7 @@ mosquitto_pub -t paradox/houdini/pzb/commands \
   -m '{"command":"getNetworkStatus"}'
 ```
 
-PZB will immediately re-publish the current `pzb/status` payload.
+PZB will immediately re-publish the current `pzb/state` payload.
 
 ## 7. Verify Contact Sensor Events
 
@@ -112,7 +112,42 @@ Expected messages:
 - `paradox/houdini/zwave/spell-box/events` — `{"input":"0","event":"open","source":"zwave-node-3",...}`
 - `paradox/houdini/zwave/spell-box/state`  — node state snapshot (retained)
 
-## 8. Install as a Systemd Service
+## 8. Include / Exclude a Node
+
+**Default inclusion strategy is Insecure (`2`).** PZB does not yet wire the S2 user
+callbacks (`grantSecurityClasses`, `validateDSKAndEnterPIN`, `abort`), so a default-strategy
+S2 bootstrap will abort and leave the node half-included and unreachable. Unless you
+have a specific reason to use S0 / S2, leave `strategy` unset.
+
+```bash
+# Start inclusion (Insecure — default)
+mosquitto_pub -t paradox/houdini/pzb/commands \
+  -m '{"command":"startInclusion","radio":"zwave"}'
+
+# Then perform the device's pairing gesture (typically 3 quick presses).
+
+# Stop early if needed
+mosquitto_pub -t paradox/houdini/pzb/commands \
+  -m '{"command":"stopInclusion","radio":"zwave"}'
+
+# Exclude a node (same gesture during exclusion window)
+mosquitto_pub -t paradox/houdini/pzb/commands \
+  -m '{"command":"startExclusion","radio":"zwave"}'
+```
+
+Optional overrides (advanced; only use if you have a reason):
+
+```jsonc
+{"command":"startInclusion","radio":"zwave","strategy":4}   // Security S2 (needs user callbacks — will fail today)
+{"command":"startInclusion","radio":"zwave","strategy":3}   // Security S0
+{"command":"startInclusion","radio":"zwave","strategy":0}   // Default (prefers S2 — will fail today)
+{"command":"startInclusion","radio":"zwave","timeout_s":120}
+```
+
+On success PZB publishes a `paradox/<base>/pzb/discovered/zwave/<node_id>` message
+with a ready-to-paste INI fragment.
+
+## 9. Install as a Systemd Service
 
 Copy the bundled template:
 
@@ -136,7 +171,7 @@ Check logs:
 journalctl -u pzb -f
 ```
 
-## 9. Serial Port Permission
+## 10. Serial Port Permission
 
 On Raspberry Pi OS the `paradox` user must be in the `dialout` group:
 
@@ -145,12 +180,13 @@ sudo usermod -aG dialout paradox
 # Log out and back in (or reboot) for the change to take effect
 ```
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 | Symptom | Check |
 |---------|-------|
 | `Config file not found` | Verify `--config` path is absolute or correct relative path |
-| `pzb/status` never appears | Confirm `broker` and `base_topic` in INI match what you subscribe to |
+| `pzb/state` never appears | Confirm `broker` and `base_topic` in INI match what you subscribe to |
 | Z-Wave driver fails to start | Check `port` path exists and the user has read/write access |
 | Node events missing | Confirm `node_id` in INI matches the Z-Wave controller's assignment |
 | `ZWAVE_DRIVER_ERROR` warnings | Non-fatal; driver will reconnect with exponential backoff |
+| Node stuck `interviewing`, `has failed S2 bootstrapping` in zwave-js log | Node was included with strategy `0` or `4`; S2 user callbacks not yet implemented. Exclude and re-include with the default (Insecure) strategy. |

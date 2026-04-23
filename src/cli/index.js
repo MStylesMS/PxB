@@ -55,7 +55,7 @@ function prettyJson(obj) {
 // ---- Subcommands -----------------------------------------------------------
 
 /**
- * `pzb status` — subscribe to pzb/status, print the first message, then exit.
+ * `pzb status` — subscribe to pzb/state, print the first message, then exit.
  */
 async function cmdStatus(args) {
     const configPath = requireConfig(args);
@@ -81,7 +81,7 @@ async function cmdStatus(args) {
     await mqtt.connect();
 
     let received = false;
-    mqtt.subscribe(topics.status, (topic, payload) => {
+    mqtt.subscribe(topics.state, (topic, payload) => {
         if (received) return;
         received = true;
         prettyJson(payload);
@@ -91,7 +91,7 @@ async function cmdStatus(args) {
     setTimeout(() => {
         if (!received) {
             process.stderr.write(
-                `Timeout: no status message received on "${topics.status}" within ${timeoutMs}ms\n` +
+                `Timeout: no state message received on "${topics.state}" within ${timeoutMs}ms\n` +
                 'Is PZB running and connected to the same broker?\n'
             );
             mqtt.disconnect().then(() => process.exit(1));

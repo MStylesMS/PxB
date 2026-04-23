@@ -146,7 +146,12 @@ class ZWaveDriver extends EventEmitter {
 
     _buildDriverOptions() {
         const opts = {
-            logConfig: { enabled: false },
+            logConfig: {
+                enabled: !!process.env.ZWAVE_DEBUG,
+                level: process.env.ZWAVE_DEBUG || 'info',
+                logToFile: !!process.env.ZWAVE_DEBUG,
+                filename: '/opt/paradox/logs/pzb/zwave-js.log',
+            },
             emitValueUpdateAfterSetValue: true,
         };
         if (this._cacheDir) opts.storage = { cacheDir: this._cacheDir };
@@ -168,6 +173,8 @@ class ZWaveDriver extends EventEmitter {
             this._lastError = null;
             this._setState('connected');
             logger.info(`Z-Wave driver ready — ${this.nodeCount} node(s) known`);
+            // Wire controller events now that the controller is available.
+            this._wireControllerEvents(driver);
             // Subscribe to per-node value updates now that the controller is ready.
             this._subscribeNodeEvents(driver);
             this.emit('connected', driver);
@@ -200,10 +207,19 @@ class ZWaveDriver extends EventEmitter {
             logger.info('Z-Wave all nodes ready');
         });
 
+    }
+
+    /** Wire controller-level events (inclusion, node added/removed).
+     *  Must be called AFTER 'driver ready' fires, when driver.controller is valid.
+     */
+    _wireControllerEvents(driver) {
+        const controller = driver.controller;
+        if (!controller || typeof controller.on !== 'function') return;
+
         // Forward controller-level inclusion/exclusion events so the Inclusion FSM
         // and discovery layer can react without touching zwave-js directly.
         const forward = (src, dst) => {
-            driver.controller?.on?.(src, (...args) => this.emit(dst, ...args));
+            controller.on(src, (...args) => this.emit(dst, ...args));
         };
         forward('inclusion started', 'inclusion-started');
         forward('inclusion stopped', 'inclusion-stopped');
@@ -212,7 +228,7 @@ class ZWaveDriver extends EventEmitter {
         forward('exclusion stopped', 'exclusion-stopped');
         forward('exclusion failed', 'exclusion-failed');
 
-        driver.controller?.on?.('node added', (node, _result) => {
+        controller.on('node added', (node, _result) => {
             // Subscribe for value updates immediately (inclusion interview will complete later).
             this._subscribeNode(node);
             this.emit('zwave-node-added', {
@@ -224,7 +240,7 @@ class ZWaveDriver extends EventEmitter {
             });
         });
 
-        driver.controller?.on?.('node removed', (node, _reason) => {
+        controller.on('node removed', (node, _reason) => {
             this.emit('zwave-node-removed', { nodeId: node.id });
         });
     }

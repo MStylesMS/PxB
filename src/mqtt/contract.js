@@ -13,7 +13,7 @@
 function bridgeTopics(baseTopic) {
     const root = `${baseTopic}/pzb`;
     return {
-        status: `${root}/status`,
+        state: `${root}/state`,
         commands: `${root}/commands`,
         warnings: `${root}/warnings`,
         discoveredRoot: `${root}/discovered`,
@@ -38,7 +38,7 @@ function nodeTopics(nodeBaseTopic) {
  * Returns { retain: bool, description: string }
  */
 const RETENTION = {
-    'pzb/status': { retain: true, description: 'periodic heartbeat' },
+    'pzb/state': { retain: true, description: 'periodic heartbeat' },
     'pzb/commands': { retain: false, description: 'on demand' },
     'pzb/warnings': { retain: false, description: 'on demand' },
     'pzb/discovered': { retain: true, description: 'on discovery' },

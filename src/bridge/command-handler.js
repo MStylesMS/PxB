@@ -8,7 +8,7 @@ const { bridgeTopics } = require('../mqtt/contract');
  * incoming command payloads to registered handlers.
  *
  * Supported commands:
- *   getNetworkStatus   — publish pzb/status immediately
+ *   getNetworkStatus   — publish pzb/state immediately
  *   startInclusion     — begin Z-Wave inclusion (optional: { timeout_s })
  *   stopInclusion      — abort in-progress inclusion
  *   startExclusion     — begin Z-Wave exclusion
@@ -92,8 +92,8 @@ class BridgeCommandHandler {
 
     _handleGetNetworkStatus() {
         const status = this._getStatus();
-        this._mqtt.publish(this._topics.status, status, { retain: true });
-        logger.info('Bridge command getNetworkStatus: status published');
+        this._mqtt.publish(this._topics.state, status, { retain: true });
+        logger.info('Bridge command getNetworkStatus: state published');
     }
 
     _requireInclusion() {
@@ -112,23 +112,52 @@ class BridgeCommandHandler {
     async _handleStartInclusion(payload) {
         if (!this._requireInclusion()) return;
         const timeoutMs = payload.timeout_s ? Number(payload.timeout_s) * 1000 : undefined;
-        await this._inclusion.startInclusion({ timeoutMs });
+        const strategy = payload.strategy != null ? Number(payload.strategy) : undefined;
+        const accepted = await this._inclusion.startInclusion({ timeoutMs, strategy });
+        if (accepted) {
+            this._publishWarning({
+                severity: 'info',
+                code: 'INCLUSION_STARTED',
+                message: 'Inclusion started',
+                context: { timeout_ms: timeoutMs || null, strategy: strategy ?? 0 },
+            });
+        }
     }
 
     async _handleStopInclusion() {
         if (!this._requireInclusion()) return;
         await this._inclusion.stopInclusion();
+        this._publishWarning({
+            severity: 'info',
+            code: 'INCLUSION_STOPPED',
+            message: 'Inclusion stopped',
+            context: {},
+        });
     }
 
     async _handleStartExclusion(payload) {
         if (!this._requireInclusion()) return;
         const timeoutMs = payload.timeout_s ? Number(payload.timeout_s) * 1000 : undefined;
-        await this._inclusion.startExclusion({ timeoutMs });
+        const accepted = await this._inclusion.startExclusion({ timeoutMs });
+        if (accepted) {
+            this._publishWarning({
+                severity: 'info',
+                code: 'EXCLUSION_STARTED',
+                message: 'Exclusion started',
+                context: { timeout_ms: timeoutMs || null },
+            });
+        }
     }
 
     async _handleStopExclusion() {
         if (!this._requireInclusion()) return;
         await this._inclusion.stopExclusion();
+        this._publishWarning({
+            severity: 'info',
+            code: 'EXCLUSION_STOPPED',
+            message: 'Exclusion stopped',
+            context: {},
+        });
     }
 
     _resolveZwaveNode(payload) {
