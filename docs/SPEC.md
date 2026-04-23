@@ -102,7 +102,7 @@ Flat retained snapshot per node. Published only when a signal changes.
 
 ```json
 {
-  "state":    "open" | "closed" | null,
+  "state":    "opened" | "closed" | null,
   "ts":       "<iso8601>" | null,
   "battery":   { "level": 0-100, "ts": "<iso8601>" } | null,
   "reachable": { "value": true,  "ts": "<iso8601>" } | null,

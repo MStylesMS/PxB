@@ -66,7 +66,7 @@ class ZWaveEvents {
     _onStatusChanged({ nodeId, status }) {
         const entry = this._registry.getByZWaveId(nodeId);
         if (!entry) {
-            logger.info(`Signal zwave-node-${nodeId} status=${status} (unconfigured)`);
+            logger.debug(`Signal zwave-node-${nodeId} status=${status} (unconfigured)`);
             return;
         }
         const prev = entry.status;
@@ -118,13 +118,13 @@ class ZWaveEvents {
         const rawValue = JSON.stringify(newValue);
 
         if (!entry) {
-            logger.info(
+            logger.debug(
                 `Signal zwave-node-${nodeId} CC=${commandClass} property=${propertyLabel} value=${rawValue} (unconfigured)`
             );
             return;
         }
 
-        logger.info(
+        logger.debug(
             `Signal zwave-node-${nodeId} node=${entry.label} CC=${commandClass} property=${propertyLabel} value=${rawValue} (configured)`
         );
 
@@ -141,7 +141,7 @@ class ZWaveEvents {
 
         // --- Contact CC normalization ---
         if (entry.type !== 'contact') {
-            logger.info(`Node "${entry.label}" type=${entry.type} — signal observed but not published in phase 1`);
+            logger.debug(`Node "${entry.label}" type=${entry.type} — signal observed but not published in phase 1`);
             return;
         }
 
@@ -155,15 +155,15 @@ class ZWaveEvents {
 
         const source = `zwave-node-${nodeId}`;
         const ts = new Date().toISOString();
-        // Internal contact signal uses "open"/"closed" wording for state; events keep "open"/"close".
-        const contactState = normalized === 'open' ? 'open' : 'closed';
+        // Internal contact signal uses past-tense "opened"/"closed" for state; events keep verb-form "open"/"close".
+        const contactState = normalized === 'open' ? 'opened' : 'closed';
 
         const { changed } = this._registry.updateSignal(entry.label, 'contact', contactState);
         this._registry.setLastEvent(entry.label, { event: normalized, ts, source });
         this._registry.setSource(entry.label, source);
 
         if (changed) {
-            logger.info(`Node "${entry.label}" contact → ${contactState} (CC ${commandClass}/${property}=${newValue})`);
+            logger.info(`Node "${entry.label}" contact → ${contactState}`);
             this._publishEvent(entry.label, { event: normalized });
             this._publishState(entry.label);
         } else {
@@ -178,7 +178,7 @@ class ZWaveEvents {
         if (!entry) return;
         const topics = nodeTopics(entry.base_topic);
         this._mqtt.publish(topics.events, payload, { retain: true });
-        logger.info(`MQTT publish ${topics.events} ${JSON.stringify(payload)}`);
+        logger.debug(`MQTT publish ${topics.events} ${JSON.stringify(payload)}`);
     }
 
     _publishState(label) {
@@ -187,7 +187,7 @@ class ZWaveEvents {
         const topics = nodeTopics(entry.base_topic);
         const state = this._buildStatePayload(entry);
         this._mqtt.publish(topics.state, state, { retain: true });
-        logger.info(`MQTT publish ${topics.state} ${JSON.stringify(state)}`);
+        logger.debug(`MQTT publish ${topics.state} ${JSON.stringify(state)}`);
     }
 
     /**
@@ -251,7 +251,7 @@ class ZWaveEvents {
             },
             event_values: entry.type === 'contact' ? ['open', 'close'] : [],
             state_fields: {
-                state: entry.type === 'contact' ? "'open' | 'closed' | null" : undefined,
+                state: entry.type === 'contact' ? "'opened' | 'closed' | null" : undefined,
                 ts: 'iso8601 | null',
                 battery: "{ level: 0-100, ts: iso8601 } | null",
                 reachable: "{ value: boolean, ts: iso8601 } | null",

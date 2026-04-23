@@ -19,11 +19,18 @@ const NOTIFICATION_ACCESS_CONTROL_MAP = {
  *
  * Handles, in priority order:
  *   1. Notification CC (113) "Access Control" property — values 22/23/0
- *   2. Notification CC (113) other properties — non-zero=open, 0=close
- *   3. Binary Sensor CC (48) — boolean or 0/1
- *   4. Bare boolean values
- *   5. Bare integer values — 0=close, non-zero=open
- *   6. String tokens — 'open'/'close'/'closed' (case-insensitive)
+ *   2. Binary Sensor CC (48) — boolean or 0/1
+ *   3. Bare boolean values
+ *   4. Bare integer values — 0=close, non-zero=open
+ *   5. String tokens — 'open'/'close'/'closed' (case-insensitive)
+ *
+ * IMPORTANT: For Notification CC (113), only the `Access Control` property
+ * is honored. Legacy `alarmType` / `alarmLevel` and other notification
+ * sub-properties are ignored (return null) because Z-Wave devices such as
+ * the Zooz ZSE41 emit a zero-valued `alarmType` / `alarmLevel` reset frame
+ * immediately before the real `Access Control` report. Treating those as
+ * close events produces a phantom close → open burst on every first
+ * actuation after driver start or a long idle period.
  *
  * Returns null when the value cannot be mapped to a contact token (callers
  * should treat null as "no event to publish").
@@ -37,18 +44,14 @@ function normalizeContact(commandClass, property, value) {
     const propStr = String(property).toLowerCase().trim();
 
     // --- Notification CC (113) ---
+    // Only Access Control drives the contact signal. Other CC 113 properties
+    // (alarmType, alarmLevel, Burglar, etc.) are ignored — see note above.
     if (commandClass === 113) {
         if (propStr === 'access control') {
             const n = Number(value);
             return NOTIFICATION_ACCESS_CONTROL_MAP[n] ?? (n === 0 ? 'close' : 'open');
         }
-        // Other Notification properties: non-zero = event active (open), 0 = idle (close)
-        if (typeof value === 'number') {
-            return value === 0 ? 'close' : 'open';
-        }
-        if (typeof value === 'boolean') {
-            return value ? 'open' : 'close';
-        }
+        return null;
     }
 
     // --- Binary Sensor CC (48) ---

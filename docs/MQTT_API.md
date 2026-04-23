@@ -137,7 +137,7 @@ Retained. Published only when telemetry changes (contact state, battery level, r
 
 ```json
 {
-  "state": "open",
+  "state": "opened",
   "ts": "2026-04-22T23:10:36.936Z",
   "battery":   { "level": 62, "ts": "2026-04-22T23:05:00.000Z" },
   "reachable": { "value": true, "ts": "2026-04-22T23:10:36.936Z" },
@@ -147,7 +147,7 @@ Retained. Published only when telemetry changes (contact state, battery level, r
 ```
 
 Field semantics:
-- `state` / `ts` — present only for contact-type nodes. `state ∈ { "open", "closed", null }`; `ts` is the timestamp of the last event that produced `state`.
+- `state` / `ts` — present only for contact-type nodes. `state ∈ { "opened", "closed", null }`; `ts` is the timestamp of the last event that produced `state`.
 - `battery` — Battery CC (128) level, 0-100. `null` until first report.
 - `reachable` — Derived from zwave-js node status (`alive` → `true`; `dead`/`failed`/`offline` → `false`).
 - `tamper` — `{ active: bool, ts: iso8601 }` or `null` until supported by the device.
@@ -174,7 +174,7 @@ Retained. Published once per configured node on PZB startup (and again on Z-Wave
   },
   "event_values": ["open", "close"],
   "state_fields": {
-    "state":     "'open' | 'closed' | null",
+    "state":     "'opened' | 'closed' | null",
     "ts":        "iso8601 | null",
     "battery":   "{ level: 0-100, ts: iso8601 } | null",
     "reachable": "{ value: boolean, ts: iso8601 } | null",

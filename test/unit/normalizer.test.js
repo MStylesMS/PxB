@@ -21,19 +21,25 @@ describe('normalizeContact: Notification CC (113) — Access Control', () => {
     });
 });
 
-describe('normalizeContact: Notification CC (113) — other properties', () => {
-    test('non-zero numeric → open', () => {
-        expect(normalizeContact(113, 'Burglar', 7)).toBe('open');
-        expect(normalizeContact(113, 'Burglar', 1)).toBe('open');
+describe('normalizeContact: Notification CC (113) — other properties ignored', () => {
+    // Legacy alarmType / alarmLevel reset frames precede real Access Control
+    // reports on devices like the Zooz ZSE41 and must not drive the contact
+    // signal. Any non-Access-Control CC 113 property returns null.
+    test('alarmType value is ignored', () => {
+        expect(normalizeContact(113, 'alarmType', 0)).toBeNull();
+        expect(normalizeContact(113, 'alarmType', 7)).toBeNull();
     });
-    test('zero → close', () => {
-        expect(normalizeContact(113, 'Burglar', 0)).toBe('close');
+    test('alarmLevel value is ignored', () => {
+        expect(normalizeContact(113, 'alarmLevel', 0)).toBeNull();
+        expect(normalizeContact(113, 'alarmLevel', 1)).toBeNull();
     });
-    test('boolean true → open', () => {
-        expect(normalizeContact(113, 'Something', true)).toBe('open');
+    test('Burglar notification is ignored (not a contact signal)', () => {
+        expect(normalizeContact(113, 'Burglar', 7)).toBeNull();
+        expect(normalizeContact(113, 'Burglar', 0)).toBeNull();
     });
-    test('boolean false → close', () => {
-        expect(normalizeContact(113, 'Something', false)).toBe('close');
+    test('unknown CC 113 property with boolean is ignored', () => {
+        expect(normalizeContact(113, 'Something', true)).toBeNull();
+        expect(normalizeContact(113, 'Something', false)).toBeNull();
     });
 });
 

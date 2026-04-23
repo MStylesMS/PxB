@@ -65,7 +65,7 @@ describe('ZWaveEvents — contact value updates', () => {
         expect(statePubs).toHaveLength(1);
         const st = statePubs[0].payload;
         expect(statePubs[0].retain).toBe(true);
-        expect(st.state).toBe('open');
+        expect(st.state).toBe('opened');
         expect(typeof st.ts).toBe('string');
         expect(st.source).toBe('zwave-node-8');
         expect(st.battery).toBe(null);
