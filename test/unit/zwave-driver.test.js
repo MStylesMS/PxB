@@ -21,8 +21,8 @@ class MockNode extends EventEmitter {
 class MockDriver extends EventEmitter {
     constructor(port, opts, behavior) {
         super();
-        this._port     = port;
-        this._opts     = opts;
+        this._port = port;
+        this._opts = opts;
         this._behavior = behavior;
         this.destroyed = false;
 

@@ -11,6 +11,10 @@ const { NodeRegistry } = require('./bridge/node-registry');
 const { BridgeCommandHandler } = require('./bridge/command-handler');
 const { ZWaveDriver } = require('./radios/zwave/driver');
 const { ZWaveEvents } = require('./radios/zwave/events');
+const { ZWaveInclusion } = require('./radios/zwave/inclusion');
+const { NodeCommandHandler } = require('./bridge/node-command-handler');
+const { DiscoveredStore } = require('./discovery/discovered-store');
+const { bridgeTopics } = require('./mqtt/contract');
 
 // --- Argument parsing (minimal, no deps) ---
 function parseArgs(argv) {
@@ -85,10 +89,54 @@ async function main() {
     // --- ZWaveEvents: wires driver → registry → MQTT (constructed after driver + registry) ---
     // eslint-disable-next-line no-unused-vars
     let zwaveEvents = null;
+    let zwaveInclusion = null;
     if (zwaveDriver) {
         // Events object is constructed here; it attaches listeners to the driver.
         // A local reference is kept to prevent GC during the process lifetime.
         zwaveEvents = new ZWaveEvents({ zwaveDriver, nodeRegistry, mqttClient: mqtt });
+
+        // Inclusion / Exclusion FSM
+        zwaveInclusion = new ZWaveInclusion({
+            zwaveDriver,
+            defaultTimeoutMs: (config.zwave.include_timeout_s || 60) * 1000,
+        });
+        zwaveInclusion.on('warning', (w) => {
+            publishBridgeWarning(mqtt, config.mqtt.base_topic, w);
+        });
+        zwaveInclusion.on('state-changed', () => {
+            // Surface inclusion state via immediate heartbeat.
+            if (heartbeat) heartbeat.flush();
+        });
+    }
+
+    // --- Discovery store (captures new Z-Wave nodes seen during inclusion) ---
+    const discoveredStore = new DiscoveredStore({
+        filePath: config.global.discovered_ini_path || null,
+        labelPrefix: config.global.default_discovered_label_prefix || 'discovered',
+    });
+    if (zwaveDriver) {
+        zwaveDriver.on('zwave-node-added', (info) => {
+            const controller = zwaveDriver.controller;
+            const node = controller?.nodes?.get(info.nodeId);
+            if (!node) return;
+            const { descriptor, fragment } = discoveredStore.record(node);
+            // Publish retained discovery notice per MQTT_API.md §6.
+            const topic = bridgeTopics(config.mqtt.base_topic).discovered('zwave', info.nodeId);
+            mqtt.publish(topic, {
+                timestamp: new Date().toISOString(),
+                radio: 'zwave',
+                node_id: info.nodeId,
+                descriptor,
+                fragment,
+            }, { retain: true });
+            logger.info(`Discovered node zwave-${info.nodeId} published to ${topic}`);
+        });
+        zwaveDriver.on('zwave-node-removed', ({ nodeId }) => {
+            discoveredStore.forget(nodeId);
+            const topic = bridgeTopics(config.mqtt.base_topic).discovered('zwave', nodeId);
+            // Clear retained discovery notice.
+            mqtt.publish(topic, '', { retain: true });
+        });
     }
 
     // Build status generator for heartbeat
@@ -119,7 +167,9 @@ async function main() {
                 zigbee: config.zigbee ? { enabled: config.zigbee.enabled, connected: false } : { enabled: false },
             },
             nodes: nodeRegistry.getSummary(),
-            inclusion: { active: false, radio: null, started_at: null },
+            inclusion: zwaveInclusion
+                ? zwaveInclusion.getStatus()
+                : { active: false, radio: null, mode: null, started_at: null, timeout_ms: null },
             ...overrides,
         };
     }
@@ -148,6 +198,18 @@ async function main() {
         baseTopic: config.mqtt.base_topic,
         getStatus: buildStatus,
         publishWarning: (w) => publishBridgeWarning(mqtt, config.mqtt.base_topic, w),
+        zwaveInclusion,
+        zwaveDriver,
+        nodeRegistry,
+    });
+
+    // --- Per-node command handler (setRelay / pulseRelay for relay/switch nodes) ---
+    // eslint-disable-next-line no-unused-vars
+    const nodeCommandHandler = new NodeCommandHandler({
+        mqttClient: mqtt,
+        nodeRegistry,
+        zwaveDriver,
+        zwaveEvents,
     });
 
     // --- Z-Wave startup (non-fatal: failures schedule reconnect) ---

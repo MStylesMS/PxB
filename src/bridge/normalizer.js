@@ -11,7 +11,7 @@
 const NOTIFICATION_ACCESS_CONTROL_MAP = {
     22: 'open',
     23: 'close',
-    0:  'close',
+    0: 'close',
 };
 
 /**
@@ -67,7 +67,7 @@ function normalizeContact(commandClass, property, value) {
     // --- Fallback: string token ---
     if (typeof value === 'string') {
         const lower = value.toLowerCase().trim();
-        if (lower === 'open')               return 'open';
+        if (lower === 'open') return 'open';
         if (lower === 'close' || lower === 'closed') return 'close';
     }
 

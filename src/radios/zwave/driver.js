@@ -34,24 +34,37 @@ class ZWaveDriver extends EventEmitter {
         super();
         if (!opts || !opts.port) throw new Error('ZWaveDriver: port is required');
 
-        this._port          = opts.port;
-        this._keys          = opts.keys || {};
-        this._cacheDir      = opts.cacheDir;
+        this._port = opts.port;
+        this._keys = opts.keys || {};
+        this._cacheDir = opts.cacheDir;
         this._driverFactory = opts.driverFactory || null; // lazy-loaded from zwave-js if null
-        this._backoffMinMs  = opts.backoffMinMs ?? 1000;
-        this._backoffMaxMs  = opts.backoffMaxMs ?? 30_000;
+        this._backoffMinMs = opts.backoffMinMs ?? 1000;
+        this._backoffMaxMs = opts.backoffMaxMs ?? 30_000;
 
-        this._driver         = null;
-        this._state          = 'stopped'; // starting|connected|degraded|error|stopped
-        this._lastError      = null;
+        this._driver = null;
+        this._state = 'stopped'; // starting|connected|degraded|error|stopped
+        this._lastError = null;
         this._currentBackoff = this._backoffMinMs;
         this._reconnectTimer = null;
-        this._shuttingDown   = false;
+        this._shuttingDown = false;
     }
 
-    get state()     { return this._state; }
+    get state() { return this._state; }
     get connected() { return this._state === 'connected'; }
     get lastError() { return this._lastError; }
+
+    /**
+     * Expose the underlying zwave-js Controller when connected. Returns null otherwise.
+     * Used by the Inclusion FSM and node-command handler; all writes should guard on `connected`.
+     */
+    get controller() {
+        return this._driver?.controller || null;
+    }
+
+    /** Expose the raw zwave-js Driver. Prefer `controller` and event forwarding. */
+    get rawDriver() {
+        return this._driver;
+    }
 
     /** Return the number of nodes known to the controller. Safe when disconnected. */
     get nodeCount() {
@@ -65,11 +78,11 @@ class ZWaveDriver extends EventEmitter {
     /** Status view for heartbeat. */
     getStatus() {
         return {
-            enabled:    true,
-            connected:  this.connected,
-            port:       this._port,
+            enabled: true,
+            connected: this.connected,
+            port: this._port,
             node_count: this.nodeCount,
-            state:      this._state,
+            state: this._state,
             last_error: this._lastError,
         };
     }
@@ -140,10 +153,10 @@ class ZWaveDriver extends EventEmitter {
 
         const keys = this._keys || {};
         const sk = {};
-        if (keys.s0)         sk.S0_Legacy            = hexToBuffer(keys.s0);
-        if (keys.s2_unauth)  sk.S2_Unauthenticated   = hexToBuffer(keys.s2_unauth);
-        if (keys.s2_auth)    sk.S2_Authenticated     = hexToBuffer(keys.s2_auth);
-        if (keys.s2_access)  sk.S2_AccessControl     = hexToBuffer(keys.s2_access);
+        if (keys.s0) sk.S0_Legacy = hexToBuffer(keys.s0);
+        if (keys.s2_unauth) sk.S2_Unauthenticated = hexToBuffer(keys.s2_unauth);
+        if (keys.s2_auth) sk.S2_Authenticated = hexToBuffer(keys.s2_auth);
+        if (keys.s2_access) sk.S2_AccessControl = hexToBuffer(keys.s2_access);
         if (Object.keys(sk).length) opts.securityKeys = sk;
 
         return opts;
@@ -186,6 +199,34 @@ class ZWaveDriver extends EventEmitter {
         driver.on('all nodes ready', () => {
             logger.info('Z-Wave all nodes ready');
         });
+
+        // Forward controller-level inclusion/exclusion events so the Inclusion FSM
+        // and discovery layer can react without touching zwave-js directly.
+        const forward = (src, dst) => {
+            driver.controller?.on?.(src, (...args) => this.emit(dst, ...args));
+        };
+        forward('inclusion started', 'inclusion-started');
+        forward('inclusion stopped', 'inclusion-stopped');
+        forward('inclusion failed', 'inclusion-failed');
+        forward('exclusion started', 'exclusion-started');
+        forward('exclusion stopped', 'exclusion-stopped');
+        forward('exclusion failed', 'exclusion-failed');
+
+        driver.controller?.on?.('node added', (node, _result) => {
+            // Subscribe for value updates immediately (inclusion interview will complete later).
+            this._subscribeNode(node);
+            this.emit('zwave-node-added', {
+                nodeId: node.id,
+                manufacturerId: node.manufacturerId ?? null,
+                productType: node.productType ?? null,
+                productId: node.productId ?? null,
+                deviceClass: node.deviceClass?.specific?.label ?? null,
+            });
+        });
+
+        driver.controller?.on?.('node removed', (node, _reason) => {
+            this.emit('zwave-node-removed', { nodeId: node.id });
+        });
     }
 
     /** Subscribe to value-update and status events for every known node. */
@@ -199,13 +240,13 @@ class ZWaveDriver extends EventEmitter {
     _subscribeNode(node) {
         node.on('value updated', (n, args) => {
             this.emit('node-value-updated', {
-                nodeId:           n.id,
-                commandClass:     args.commandClass,
+                nodeId: n.id,
+                commandClass: args.commandClass,
                 commandClassName: args.commandClassName,
-                property:         args.propertyName ?? args.property,
-                propertyKey:      args.propertyKey,
-                newValue:         args.newValue,
-                oldValue:         args.oldValue,
+                property: args.propertyName ?? args.property,
+                propertyKey: args.propertyKey,
+                newValue: args.newValue,
+                oldValue: args.oldValue,
             });
         });
 

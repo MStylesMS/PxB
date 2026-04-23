@@ -17,17 +17,17 @@ class NodeRegistry {
         for (const [label, cfg] of Object.entries(configNodes)) {
             this._nodes[label] = {
                 label,
-                radio:         cfg.radio,
-                type:          cfg.type,
-                node_id:       cfg.node_id || null,
-                ieee:          cfg.ieee    || null,
-                base_topic:    cfg.base_topic,
+                radio: cfg.radio,
+                type: cfg.type,
+                node_id: cfg.node_id || null,
+                ieee: cfg.ieee || null,
+                base_topic: cfg.base_topic,
                 input_channel: cfg.input_channel || '0',
-                description:   cfg.description  || '',
+                description: cfg.description || '',
                 // Runtime
-                status:     'offline',
+                status: 'offline',
                 last_event: null,
-                signals:    {},
+                signals: {},
             };
         }
     }
@@ -101,8 +101,8 @@ class NodeRegistry {
         const counts = { total: 0, ready: 0, failed: 0, interviewing: 0 };
         for (const e of Object.values(this._nodes)) {
             counts.total++;
-            if (e.status === 'ready')         counts.ready++;
-            else if (e.status === 'failed')   counts.failed++;
+            if (e.status === 'ready') counts.ready++;
+            else if (e.status === 'failed') counts.failed++;
             else if (e.status === 'interviewing') counts.interviewing++;
         }
         return counts;

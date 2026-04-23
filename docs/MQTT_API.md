@@ -54,11 +54,11 @@ Retained. Republished every `heartbeat_interval` seconds.
     "zigbee": { "enabled": false }
   },
   "nodes": { "total": 4, "ready": 4, "failed": 0, "interviewing": 0 },
-  "inclusion": { "active": false, "radio": null, "started_at": null }
+  "inclusion": { "active": false, "radio": null, "mode": null, "started_at": null, "timeout_ms": null }
 }
 ```
 
-`state ∈ {ok, degraded, error, starting, stopping, including}`.
+`state ∈ {ok, degraded, error, starting, stopping}` (when inclusion/exclusion is active, `inclusion.active=true` and `inclusion.mode ∈ {inclusion, exclusion}`).
 
 ## 4. Bridge Commands (`pzb/commands`)
 
@@ -103,15 +103,21 @@ Retained. Emitted when inclusion produces a new node.
   "timestamp": "...",
   "radio": "zwave",
   "node_id": 3,
-  "label_assigned": "discovered-003",
-  "device_class": "Notification Sensor / Access Control",
-  "manufacturer": "Aeotec",
-  "product": "Door/Window Sensor 7",
-  "ini_fragment_path": "/opt/paradox/config/pzb/discovered.ini"
+  "descriptor": {
+    "node_id": 3,
+    "manufacturer_id": 134,
+    "product_type": 258,
+    "product_id": 100,
+    "device_class_generic": "Binary Sensor",
+    "device_class_specific": "Door/Window Sensor",
+    "label": "Door/Window Sensor 7",
+    "guessed_type": "contact"
+  },
+  "fragment": "; ---- Discovered ... ----\n[node:discovered-3]\nradio       = zwave\nnode_id     = 3\ntype        = contact\nbase_topic  = TODO: ...\ndescription = TODO: ...\n"
 }
 ```
 
-A companion INI fragment is written to disk (see `ini_fragment_path`).
+A companion INI fragment is also written to `[global] discovered_ini_path` (when configured) and can be retrieved with `pzb dump-ini --node-id N`.
 
 ## 7. Per-Node Events (`{node.base_topic}/events`)
 

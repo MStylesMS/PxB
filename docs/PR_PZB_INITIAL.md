@@ -61,51 +61,51 @@ See [AI-DETAILED-OVERVIEW.md](../AI-DETAILED-OVERVIEW.md). Key points:
 
 ## Phase 1 — Minimal Bootable Bridge (Z-Wave, Contact Only)
 
-### 1.1 Config + MQTT + Heartbeat
+### 1.1 Config + MQTT + Heartbeat ✅
 
-- [ ] `src/util/logger.js` — wraps console + level filter. 🟢
-- [ ] `src/config/schema.js` — per-section schema. 🟢
-- [ ] `src/config/ini-loader.js` — parse, validate, expand into typed config. 🟢
-- [ ] `src/mqtt/client.js` — thin wrapper over `mqtt` lib with retained helpers. 🟢
-- [ ] `src/mqtt/contract.js` — topic builders + retention policy. 🟢
-- [ ] `src/bridge/heartbeat.js` — periodic `pzb/status` publisher. 🟢
-- [ ] `src/index.js` — wire config + MQTT + heartbeat (no radio yet). 🟢
-- [ ] Unit tests: schema, loader, topic builders, heartbeat cadence. 🟢
+- [x] `src/util/logger.js` — wraps console + level filter. 🟢
+- [x] `src/config/schema.js` — per-section schema. 🟢
+- [x] `src/config/ini-loader.js` — parse, validate, expand into typed config. 🟢
+- [x] `src/mqtt/client.js` — thin wrapper over `mqtt` lib with retained helpers. 🟢
+- [x] `src/mqtt/contract.js` — topic builders + retention policy. 🟢
+- [x] `src/bridge/heartbeat.js` — periodic `pzb/status` publisher. 🟢
+- [x] `src/index.js` — wire config + MQTT + heartbeat (no radio yet). 🟢
+- [x] Unit tests: schema, loader, topic builders, heartbeat cadence. 🟢
 
 Gate: `node src/index.js --config <empty-nodes>` publishes retained heartbeat every 10s.
 
-### 1.2 Z-Wave Driver Lifecycle
+### 1.2 Z-Wave Driver Lifecycle ✅
 
-- [ ] `src/radios/zwave/driver.js` — zwave-js singleton, start/stop, reconnect backoff. 🔵
-- [ ] Hook driver state into `pzb/status` (`radios.zwave.connected`, `node_count`). 🔵
-- [ ] Surface driver errors as bridge warnings. 🔵
-- [ ] Integration tests with mocked driver fixture. 🔵
+- [x] `src/radios/zwave/driver.js` — zwave-js singleton, start/stop, reconnect backoff. 🔵
+- [x] Hook driver state into `pzb/status` (`radios.zwave.connected`, `node_count`). 🔵
+- [x] Surface driver errors as bridge warnings. 🔵
+- [x] Integration tests with mocked driver fixture. 🔵
 
 Gate: radio opens on real hardware; yank-and-replug test produces `degraded` then `ok` without crash.
 
-### 1.3 Node Registry + Contact Events
+### 1.3 Node Registry + Contact Events ✅
 
-- [ ] `src/bridge/node-registry.js` — loads configured nodes, tracks runtime state. 🟢
-- [ ] `src/bridge/normalizer.js` — contact event normalization (reuses logic mirrored from PFx InputZone). 🟢
-- [ ] `src/radios/zwave/events.js` — wire zwave-js Notification CC → normalizer. 🔵
-- [ ] Publish retained per-node `events` and `state` on change only. 🟢
-- [ ] Unit tests: normalizer for all Z-Wave contact payload variants (0/1, 22/23, boolean, strings). 🟢
+- [x] `src/bridge/node-registry.js` — loads configured nodes, tracks runtime state. 🟢
+- [x] `src/bridge/normalizer.js` — contact event normalization (reuses logic mirrored from PFx InputZone). 🟢
+- [x] `src/radios/zwave/events.js` — wire zwave-js Notification CC → normalizer. 🔵
+- [x] Publish retained per-node `events` and `state` on change only. 🟢
+- [x] Unit tests: normalizer for all Z-Wave contact payload variants (0/1, 22/23, boolean, strings). 🟢
 
 Gate: real spell-box open/close produces `open` / `close` events on its configured `base_topic`, PFx `InputZone` pointing at it updates state identically to the current working synthetic path.
 
-### 1.4 CLI + MQTT Command Surface (Read-Only + Status)
+### 1.4 CLI + MQTT Command Surface (Read-Only + Status) ✅
 
-- [ ] `src/cli/index.js` — arg parser, subcommand loader. 🟢
-- [ ] `pzb status` — dumps current retained `pzb/status` (pretty-printed). 🟢
-- [ ] `pzb list-nodes` — prints configured + discovered nodes. 🟢
-- [ ] MQTT `getNetworkStatus` handler. 🟢
+- [x] `src/cli/index.js` — arg parser, subcommand loader. 🟢
+- [x] `pzb status` — dumps current retained `pzb/status` (pretty-printed). 🟢
+- [x] `pzb list-nodes` — prints configured + discovered nodes. 🟢
+- [x] MQTT `getNetworkStatus` handler. 🟢
 
 Gate: CLI status and MQTT `getNetworkStatus` agree.
 
-### 1.5 Packaging
+### 1.5 Packaging ✅
 
-- [ ] Commit systemd unit template under `config/systemd/pzb.service`. 🟢
-- [ ] Publish minimal `docs/QUICK_START.md` walkthrough with real commands. 🟢
+- [x] Commit systemd unit template under `config/systemd/pzb.service`. 🟢
+- [x] Publish minimal `docs/QUICK_START.md` walkthrough with real commands. 🟢
 
 Gate: installable on a Pi and boots under systemd.
 
@@ -113,39 +113,39 @@ Gate: installable on a Pi and boots under systemd.
 
 ## Phase 2 — Pairing, Relays, and Discovery Export
 
-### 2.1 Inclusion / Exclusion FSM
+### 2.1 Inclusion / Exclusion FSM ✅
 
-- [ ] `src/radios/zwave/inclusion.js` — inclusion/exclusion state machine. 🔵
-- [ ] MQTT handlers: `startInclusion`, `stopInclusion`, `startExclusion`, `stopExclusion`. 🔵
-- [ ] Reflect active inclusion in `pzb/status.inclusion`. 🔵
-- [ ] Timeouts → `INCLUSION_TIMEOUT` bridge warning. 🔵
+- [x] `src/radios/zwave/inclusion.js` — inclusion/exclusion state machine. 🟢
+- [x] MQTT handlers: `startInclusion`, `stopInclusion`, `startExclusion`, `stopExclusion`. 🟢
+- [x] Reflect active inclusion in `pzb/status.inclusion`. 🟢
+- [x] Timeouts → `INCLUSION_TIMEOUT` bridge warning. 🟢
 
 Gate: real device includes and excludes reliably; timeouts handled cleanly.
 
-### 2.2 Discovery INI Generator
+### 2.2 Discovery INI Generator ✅
 
-- [ ] `src/discovery/ini-generator.js` — build fragment from interviewed node. 🟢
-- [ ] `src/discovery/discovered-store.js` — persist fragments to `discovered.ini` sidecar. 🟢
-- [ ] Retained discovery notice on `pzb/discovered/zwave/<nodeId>`. 🟢
-- [ ] `pzb dump-ini` — print fragment to stdout on demand. 🟢
+- [x] `src/discovery/ini-generator.js` — build fragment from interviewed node. 🟢
+- [x] `src/discovery/discovered-store.js` — persist fragments to `discovered.ini` sidecar. 🟢
+- [x] Retained discovery notice on `pzb/discovered/zwave/<nodeId>`. 🟢
+- [x] `pzb dump-ini` — print fragment to stdout on demand. 🟢
 
 Gate: including a fresh sensor yields a correct, paste-ready INI block with all `TODO:` markers.
 
-### 2.3 Relay Output
+### 2.3 Relay Output ✅
 
-- [ ] `src/radios/zwave/commands.js` — binary switch set/pulse. 🔵
-- [ ] Node-level command handler: `setRelay`, `pulseRelay`. 🔵
-- [ ] Echo result into node state (`signals.relay`). 🟢
-- [ ] `pzb relay <label> on|off|pulse --ms N` CLI. 🟢
-- [ ] Unit tests + integration test against a mock driver. 🟢
+- [x] `src/radios/zwave/commands.js` — binary switch set/pulse. 🟢
+- [x] Node-level command handler: `setRelay`, `pulseRelay`. 🟢
+- [x] Echo result into node state (`signals.relay`). 🟢
+- [x] `pzb relay <label> on|off|pulse --ms N` CLI. 🟢
+- [x] Unit tests + integration test against a mock driver. 🟢 *(unit tests against mock driver; hardware validation pending)*
 
 Gate: real Z-Wave relay toggles from MQTT and CLI; failures produce `COMMAND_TIMEOUT` / `COMMAND_UNSUPPORTED` warnings.
 
-### 2.4 Node Lifecycle Commands
+### 2.4 Node Lifecycle Commands ✅
 
-- [ ] `refreshNode` handler. 🔵
-- [ ] `removeFailedNode` handler. 🔵
-- [ ] Per-node `NODE_FAILED` / `NODE_RECOVERED` warnings. 🔵
+- [x] `refreshNode` handler. 🟢
+- [x] `removeFailedNode` handler. 🟢
+- [x] Per-node `NODE_FAILED` / `NODE_RECOVERED` warnings. 🟢
 
 Gate: failed-node scenario reproduced on bench and recovered via command.
 
@@ -193,12 +193,12 @@ No code in this phase.
 
 ## Validation Matrix (Phase 1 Exit)
 
-- [ ] Heartbeat cadence within ±200ms of configured interval.
-- [ ] Contact sensor open/close → correct retained event + state update on change only.
-- [ ] PFx `InputZone` consumes PZB events with no code changes.
-- [ ] USB unplug → `degraded` → replug → `ok` without PZB crash.
-- [ ] Malformed INI → fails fast with actionable error.
-- [ ] Clean SIGTERM shutdown (no MQTT publish-after-disconnect).
+- [x] Heartbeat cadence within ±200ms of configured interval. *(unit tested)*
+- [ ] Contact sensor open/close → correct retained event + state update on change only. *(normalizer unit tested; end-to-end requires hardware)*
+- [ ] PFx `InputZone` consumes PZB events with no code changes. *(requires live integration test)*
+- [ ] USB unplug → `degraded` → replug → `ok` without PZB crash. *(requires hardware)*
+- [x] Malformed INI → fails fast with actionable error. *(unit tested)*
+- [ ] Clean SIGTERM shutdown (no MQTT publish-after-disconnect). *(not yet tested)*
 
 ## Coordination
 

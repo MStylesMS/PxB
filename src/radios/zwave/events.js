@@ -57,11 +57,43 @@ class ZWaveEvents {
             logger.debug(`Z-Wave status update for unconfigured node ${nodeId} (${status}) — ignored`);
             return;
         }
+        const prev = entry.status;
         const changed = this._registry.setStatus(entry.label, status);
         if (changed) {
             logger.info(`Node "${entry.label}" (zwave-node-${nodeId}) status → ${status}`);
             this._publishState(entry.label);
+            this._emitLifecycleWarning(entry, prev, status);
         }
+    }
+
+    _emitLifecycleWarning(entry, prev, next) {
+        // dead → failed transition
+        if (next === 'failed' && prev !== 'failed') {
+            this._publishNodeWarning(entry, {
+                severity: 'error',
+                code: 'NODE_FAILED',
+                message: `Node ${entry.label} reported failed`,
+                context: { node_id: entry.node_id, previous_status: prev },
+            });
+        } else if (prev === 'failed' && (next === 'ready' || next === 'alive')) {
+            this._publishNodeWarning(entry, {
+                severity: 'info',
+                code: 'NODE_RECOVERED',
+                message: `Node ${entry.label} recovered`,
+                context: { node_id: entry.node_id },
+            });
+        }
+    }
+
+    _publishNodeWarning(entry, { severity, code, message, context }) {
+        const topic = nodeTopics(entry.base_topic).warnings;
+        this._mqtt.publish(topic, {
+            timestamp: new Date().toISOString(),
+            severity,
+            code,
+            message,
+            context: { label: entry.label, ...context },
+        }, { retain: false });
     }
 
     _onValueUpdated({ nodeId, commandClass, property, propertyKey, newValue, oldValue }) {
@@ -121,6 +153,12 @@ class ZWaveEvents {
         const topics = nodeTopics(entry.base_topic);
         const state = entry.last_event || { event: null, ts: null, source: null };
         this._mqtt.publish(topics.state, state, { retain: true });
+    }
+
+    /** Public: force-publish the current state for the given registry entry. */
+    publishNodeState(entry) {
+        if (!entry) return;
+        this._publishState(entry.label);
     }
 }
 
