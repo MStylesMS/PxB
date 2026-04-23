@@ -74,4 +74,26 @@ function normalizeContact(commandClass, property, value) {
     return null;
 }
 
-module.exports = { normalizeContact, NOTIFICATION_ACCESS_CONTROL_MAP };
+/**
+ * Normalize a Z-Wave Battery CC (128) value-change into a battery percentage.
+ *
+ * Battery CC property "level" reports 0-100 (with 0xFF = low-battery flag,
+ * which zwave-js typically surfaces as 0). Returns null when the value is
+ * not a plausible percentage.
+ *
+ * @param {number}        commandClass
+ * @param {string|number} property
+ * @param {*}             value
+ * @returns {number|null} integer 0-100, or null
+ */
+function normalizeBattery(commandClass, property, value) {
+    if (commandClass !== 128) return null;
+    const propStr = String(property).toLowerCase().trim();
+    if (propStr !== 'level') return null;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    if (n < 0 || n > 100) return null;
+    return Math.round(n);
+}
+
+module.exports = { normalizeContact, normalizeBattery, NOTIFICATION_ACCESS_CONTROL_MAP };

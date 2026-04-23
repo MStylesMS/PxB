@@ -28,6 +28,7 @@ class NodeRegistry {
                 status: 'offline',
                 last_event: null,
                 signals: {},
+                source: null,
             };
         }
     }
@@ -91,6 +92,14 @@ class NodeRegistry {
     setLastEvent(label, event) {
         const entry = this._nodes[label];
         if (entry) entry.last_event = event;
+    }
+
+    /**
+     * Record the "source" string for the last signal (e.g. "zwave-node-8").
+     */
+    setSource(label, source) {
+        const entry = this._nodes[label];
+        if (entry) entry.source = source;
     }
 
     /**

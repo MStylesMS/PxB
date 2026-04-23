@@ -28,6 +28,7 @@ function nodeTopics(nodeBaseTopic) {
     return {
         events: `${nodeBaseTopic}/events`,
         state: `${nodeBaseTopic}/state`,
+        schema: `${nodeBaseTopic}/schema`,
         commands: `${nodeBaseTopic}/commands`,
         warnings: `${nodeBaseTopic}/warnings`,
     };
@@ -43,7 +44,8 @@ const RETENTION = {
     'pzb/warnings': { retain: false, description: 'on demand' },
     'pzb/discovered': { retain: true, description: 'on discovery' },
     'node/events': { retain: true, description: 'on change only' },
-    'node/state': { retain: true, description: 'on change only' },
+    'node/state': { retain: true, description: 'on telemetry change' },
+    'node/schema': { retain: true, description: 'once at startup' },
     'node/commands': { retain: false, description: 'on demand' },
     'node/warnings': { retain: false, description: 'on demand' },
 };

@@ -108,9 +108,22 @@ Actuate a configured contact sensor (open/close). Check:
 mosquitto_sub -v -t 'paradox/houdini/zwave/spell-box/#'
 ```
 
-Expected messages:
-- `paradox/houdini/zwave/spell-box/events` — `{"input":"0","event":"open","source":"zwave-node-3",...}`
-- `paradox/houdini/zwave/spell-box/state`  — node state snapshot (retained)
+Expected retained messages (subscribe once, you'll see the latest of each):
+- `.../schema` — one-shot descriptor published at PZB startup; tells consumers the node's type, topics, and payload shape.
+- `.../events` — short event payload per state change, e.g. `{"event":"open"}` / `{"event":"close"}`.
+- `.../state`  — flat telemetry snapshot published only when something changes:
+  ```json
+  {
+    "state": "closed",
+    "ts": "2026-04-22T23:10:36.936Z",
+    "battery":   { "level": 62, "ts": "..." },
+    "reachable": { "value": true, "ts": "..." },
+    "tamper":    null,
+    "source":    "zwave-node-3"
+  }
+  ```
+
+See [MQTT_API.md §8](MQTT_API.md) for the full state / schema reference.
 
 ## 8. Include / Exclude a Node
 

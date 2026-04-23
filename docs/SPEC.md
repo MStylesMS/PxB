@@ -69,25 +69,23 @@ See [CONFIG_INI.md](CONFIG_INI.md) for full key list.
 
 See [MQTT_API.md](MQTT_API.md) for canonical definitions. Summary:
 
-- Per node: `{base_topic}/events`, `/state`, `/commands`, `/warnings`.
+- Per node: `{base_topic}/events`, `/state`, `/schema`, `/commands`, `/warnings`.
 - Bridge: `{base_topic}/pzb/state`, `/commands`, `/warnings`, `/discovered/<radio>/<id>`.
 
 Retention rules:
 - Bridge `pzb/state`: **retained**, periodic (default 10s).
-- Node `events` and `state`: **retained**, **on-change only**.
+- Node `events`: **retained**, published only when an event occurs.
+- Node `state`: **retained**, published only when telemetry changes (state, battery, reachable, tamper).
+- Node `schema`: **retained**, published once at PZB startup (and on driver reconnect).
 - Node `commands` and `warnings`, bridge `commands` and `warnings`: **not retained**.
 - Discovery notices: **retained**.
 
 ## 10. Event Schema (Normalized)
 
+Short, retained per-node event payload:
+
 ```json
-{
-  "input": "<channel/string>",
-  "event": "<normalized token>",
-  "source": "zwave-node-<n> | zigbee-<ieeeTail>",
-  "ts": <epoch_ms>,
-  "raw": { "...original radio payload..." }
-}
+{ "event": "open" }
 ```
 
 Normalized tokens by type:
@@ -100,26 +98,22 @@ Normalized tokens by type:
 
 ## 11. State Schema
 
-Minimal retained snapshot per node. Only updated when signals change.
+Flat retained snapshot per node. Published only when a signal changes.
 
 ```json
 {
-  "timestamp": "<iso8601>",
-  "label": "<node label>",
-  "radio": "zwave|zigbee",
-  "type": "contact|relay|...",
-  "status": "ready|interviewing|failed|offline",
-  "last_event": { "...last normalized event..." },
-  "signals": {
-    "contact": { "value": "open|close", "ts": "<iso8601>" },
-    "relay":   { "value": "on|off",    "ts": "<iso8601>" },
-    "battery": { "value": 87,          "ts": "<iso8601>" },
-    "reachable": { "value": true,      "ts": "<iso8601>" }
-  }
+  "state":    "open" | "closed" | null,
+  "ts":       "<iso8601>" | null,
+  "battery":   { "level": 0-100, "ts": "<iso8601>" } | null,
+  "reachable": { "value": true,  "ts": "<iso8601>" } | null,
+  "tamper":    { "active": false, "ts": "<iso8601>" } | null,
+  "source":    "zwave-node-<n>" | null
 }
 ```
 
-Only signals relevant to the node type are populated. Absent signals are omitted (not `null`).
+- `state` / `ts` are present only for contact-type nodes.
+- Omitted or `null` signals have not yet been reported.
+- See [MQTT_API.md §8](MQTT_API.md) for the authoritative shape and schema topic.
 
 ## 12. Bridge Status Schema
 

@@ -1,7 +1,7 @@
 'use strict';
 
 const logger = require('../../util/logger');
-const { normalizeContact } = require('../../bridge/normalizer');
+const { normalizeContact, normalizeBattery } = require('../../bridge/normalizer');
 const { nodeTopics } = require('../../mqtt/contract');
 
 /**
@@ -9,7 +9,11 @@ const { nodeTopics } = require('../../mqtt/contract');
  *
  * Listens to 'node-value-updated' and 'node-status-changed' from ZWaveDriver,
  * normalizes them via the normalizer, updates the NodeRegistry, and publishes
- * retained events + state only when something actually changes.
+ * retained events + state only when telemetry actually changes.
+ *
+ * Also publishes a retained per-node `schema` message once per node on
+ * construction (and again when the driver reconnects) so consumers can
+ * discover the topic layout and state/event shape.
  */
 class ZWaveEvents {
     /**
@@ -27,6 +31,11 @@ class ZWaveEvents {
         this._driver.on('node-status-changed', (ev) => this._onStatusChanged(ev));
         this._driver.on('connected', () => this._onDriverConnected());
         this._driver.on('disconnected', () => this._onDriverDisconnected());
+
+        // Publish schemas at startup. If MQTT isn't connected yet, the driver
+        // 'connected' handler will republish; we skip quietly here to avoid a
+        // noisy warning during the common startup race.
+        this._publishAllSchemas();
     }
 
     // --- Driver lifecycle ---
@@ -38,13 +47,16 @@ class ZWaveEvents {
                 this._registry.setStatus(entry.label, 'interviewing');
             }
         }
+        // Re-publish schemas in case the broker was unavailable at startup.
+        this._publishAllSchemas();
     }
 
     _onDriverDisconnected() {
         for (const entry of this._registry.getAll()) {
             if (entry.radio === 'zwave') {
-                const changed = this._registry.setStatus(entry.label, 'offline');
-                if (changed) this._publishState(entry.label);
+                const { changed: reachableChanged } = this._registry.updateSignal(entry.label, 'reachable', false);
+                const statusChanged = this._registry.setStatus(entry.label, 'offline');
+                if (reachableChanged || statusChanged) this._publishState(entry.label);
             }
         }
     }
@@ -58,16 +70,20 @@ class ZWaveEvents {
             return;
         }
         const prev = entry.status;
-        const changed = this._registry.setStatus(entry.label, status);
-        if (changed) {
-            logger.info(`Node "${entry.label}" (zwave-node-${nodeId}) status → ${status}`);
+        const statusChanged = this._registry.setStatus(entry.label, status);
+
+        // Map zwave-js node status → reachable signal.
+        const reachable = !(status === 'dead' || status === 'failed' || status === 'offline');
+        const { changed: reachableChanged } = this._registry.updateSignal(entry.label, 'reachable', reachable);
+
+        if (statusChanged || reachableChanged) {
+            logger.info(`Node "${entry.label}" (zwave-node-${nodeId}) status → ${status} (reachable=${reachable})`);
             this._publishState(entry.label);
             this._emitLifecycleWarning(entry, prev, status);
         }
     }
 
     _emitLifecycleWarning(entry, prev, next) {
-        // dead → failed transition
         if (next === 'failed' && prev !== 'failed') {
             this._publishNodeWarning(entry, {
                 severity: 'error',
@@ -96,7 +112,7 @@ class ZWaveEvents {
         }, { retain: false });
     }
 
-    _onValueUpdated({ nodeId, commandClass, property, propertyKey, newValue, oldValue }) {
+    _onValueUpdated({ nodeId, commandClass, property, propertyKey, newValue }) {
         const entry = this._registry.getByZWaveId(nodeId);
         const propertyLabel = propertyKey === undefined ? property : `${property}:${propertyKey}`;
         const rawValue = JSON.stringify(newValue);
@@ -112,7 +128,18 @@ class ZWaveEvents {
             `Signal zwave-node-${nodeId} node=${entry.label} CC=${commandClass} property=${propertyLabel} value=${rawValue} (configured)`
         );
 
-        // Only process contact/sensor types in phase 1
+        // --- Battery CC (128) → battery signal ---
+        const batteryLevel = normalizeBattery(commandClass, property, newValue);
+        if (batteryLevel !== null) {
+            const { changed } = this._registry.updateSignal(entry.label, 'battery', batteryLevel);
+            if (changed) {
+                logger.info(`Node "${entry.label}" battery → ${batteryLevel}%`);
+                this._publishState(entry.label);
+            }
+            return;
+        }
+
+        // --- Contact CC normalization ---
         if (entry.type !== 'contact') {
             logger.info(`Node "${entry.label}" type=${entry.type} — signal observed but not published in phase 1`);
             return;
@@ -128,20 +155,19 @@ class ZWaveEvents {
 
         const source = `zwave-node-${nodeId}`;
         const ts = new Date().toISOString();
+        // Internal contact signal uses "open"/"closed" wording for state; events keep "open"/"close".
+        const contactState = normalized === 'open' ? 'open' : 'closed';
 
-        const eventPayload = { event: normalized };
-        const lastEvent = { event: normalized, ts, source };
-
-        // Update signal (returns whether value changed)
-        const { changed } = this._registry.updateSignal(entry.label, 'contact', normalized);
-        this._registry.setLastEvent(entry.label, lastEvent);
+        const { changed } = this._registry.updateSignal(entry.label, 'contact', contactState);
+        this._registry.setLastEvent(entry.label, { event: normalized, ts, source });
+        this._registry.setSource(entry.label, source);
 
         if (changed) {
-            logger.info(`Node "${entry.label}" contact → ${normalized} (CC ${commandClass}/${property}=${newValue})`);
-            this._publishEvent(entry.label, eventPayload);
+            logger.info(`Node "${entry.label}" contact → ${contactState} (CC ${commandClass}/${property}=${newValue})`);
+            this._publishEvent(entry.label, { event: normalized });
             this._publishState(entry.label);
         } else {
-            logger.debug(`Node "${entry.label}" contact ${normalized} (no change — not republished)`);
+            logger.debug(`Node "${entry.label}" contact ${contactState} (no change — not republished)`);
         }
     }
 
@@ -159,9 +185,87 @@ class ZWaveEvents {
         const entry = this._registry.getByLabel(label);
         if (!entry) return;
         const topics = nodeTopics(entry.base_topic);
-        const state = entry.last_event || { event: null, ts: null, source: null };
+        const state = this._buildStatePayload(entry);
         this._mqtt.publish(topics.state, state, { retain: true });
         logger.info(`MQTT publish ${topics.state} ${JSON.stringify(state)}`);
+    }
+
+    /**
+     * Build the flat state payload for a node. Shape:
+     * {
+     *   "state":      "open" | "closed" | null,   // contact-type nodes only
+     *   "ts":         iso8601 | null,             // ts of last event producing `state`
+     *   "battery":    { "level": 0-100, "ts": iso8601 } | null,
+     *   "reachable":  { "value": bool, "ts": iso8601 } | null,
+     *   "tamper":     { "active": bool, "ts": iso8601 } | null,
+     *   "source":     "zwave-node-N" | null
+     * }
+     */
+    _buildStatePayload(entry) {
+        const signals = entry.signals || {};
+        const out = {
+            state: signals.contact ? signals.contact.value : null,
+            ts: signals.contact ? signals.contact.ts : null,
+            battery: signals.battery
+                ? { level: signals.battery.value, ts: signals.battery.ts }
+                : null,
+            reachable: signals.reachable
+                ? { value: signals.reachable.value, ts: signals.reachable.ts }
+                : null,
+            tamper: signals.tamper
+                ? { active: signals.tamper.value, ts: signals.tamper.ts }
+                : null,
+            source: entry.source || (entry.node_id ? `zwave-node-${entry.node_id}` : null),
+        };
+        // Drop `state`/`ts` for non-contact types so the payload isn't misleading.
+        if (entry.type !== 'contact') {
+            delete out.state;
+            delete out.ts;
+        }
+        return out;
+    }
+
+    // --- Schema ---
+
+    _publishAllSchemas() {
+        // Defer quietly if MQTT isn't ready; driver 'connected' will retry.
+        if (typeof this._mqtt.isConnected === 'function' && !this._mqtt.isConnected()) return;
+        for (const entry of this._registry.getAll()) {
+            if (entry.radio === 'zwave') this._publishSchema(entry);
+        }
+    }
+
+    _publishSchema(entry) {
+        const topics = nodeTopics(entry.base_topic);
+        const schema = {
+            application: 'pzb',
+            label: entry.label,
+            radio: entry.radio,
+            type: entry.type,
+            node_id: entry.node_id,
+            topics: {
+                events: topics.events,
+                state: topics.state,
+                commands: topics.commands,
+                warnings: topics.warnings,
+            },
+            event_values: entry.type === 'contact' ? ['open', 'close'] : [],
+            state_fields: {
+                state: entry.type === 'contact' ? "'open' | 'closed' | null" : undefined,
+                ts: 'iso8601 | null',
+                battery: "{ level: 0-100, ts: iso8601 } | null",
+                reachable: "{ value: boolean, ts: iso8601 } | null",
+                tamper: "{ active: boolean, ts: iso8601 } | null",
+                source: "'zwave-node-N' | null",
+            },
+            retention: { events: true, state: true, schema: true },
+        };
+        // Strip undefined state_fields entries for cleanliness.
+        for (const k of Object.keys(schema.state_fields)) {
+            if (schema.state_fields[k] === undefined) delete schema.state_fields[k];
+        }
+        this._mqtt.publish(topics.schema, schema, { retain: true });
+        logger.info(`MQTT publish ${topics.schema} (schema for "${entry.label}")`);
     }
 
     /** Public: force-publish the current state for the given registry entry. */

@@ -73,6 +73,11 @@ class MqttClient {
         this._client.publish(topic, msg, options);
     }
 
+    /** Returns true when the client has an active MQTT broker connection. */
+    isConnected() {
+        return !!(this._client && this._ready);
+    }
+
     /**
      * Subscribe and register a message handler.
      */

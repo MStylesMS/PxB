@@ -17,6 +17,7 @@ describe('nodeTopics', () => {
 
   test('events', ()   => expect(nt.events).toBe('paradox/houdini/zwave/spell-box/events'));
   test('state', ()    => expect(nt.state).toBe('paradox/houdini/zwave/spell-box/state'));
+  test('schema', ()   => expect(nt.schema).toBe('paradox/houdini/zwave/spell-box/schema'));
   test('commands', () => expect(nt.commands).toBe('paradox/houdini/zwave/spell-box/commands'));
   test('warnings', () => expect(nt.warnings).toBe('paradox/houdini/zwave/spell-box/warnings'));
 });

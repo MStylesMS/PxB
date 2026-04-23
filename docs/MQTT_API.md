@@ -16,8 +16,9 @@ All PZB topics sit under a configurable `base_topic` from `[mqtt]` in the INI. T
       zwave/<nodeId>      retained (discovery notice)
       zigbee/<ieeeTail>   retained (phase 3)
   <operator-defined per-node topic>/
+    schema                retained, once at startup
     events                retained, on-change
-    state                 retained, on-change
+    state                 retained, on-telemetry-change
     commands              not retained (outputs only)
     warnings              not retained
 ```
@@ -32,8 +33,9 @@ The per-node segment is **fully operator-defined** via INI. Example: `paradox/ho
 | `pzb/commands` | no | On demand |
 | `pzb/warnings` | no | On demand |
 | `pzb/discovered/...` | yes | On discovery |
-| `<node>/events` | yes | **Only on change** |
-| `<node>/state` | yes | **Only on change** |
+| `<node>/schema` | yes | **Once at startup** per node (and on driver reconnect) |
+| `<node>/events` | yes | **Only on event** |
+| `<node>/state` | yes | **Only when telemetry changes** (state, battery, reachable, tamper) |
 | `<node>/commands` | no | On demand |
 | `<node>/warnings` | no | On demand |
 
@@ -131,13 +133,57 @@ Event token vocabulary: `open` | `close`.
 
 ## 8. Per-Node State (`{node.base_topic}/state`)
 
-Retained. Only published when any signal changes (or on driver disconnect). Reflects the most recent event.
+Retained. Published only when telemetry changes (contact state, battery level, reachability, or tamper). Shape is flat with per-signal timestamps so consumers can tell which signal most recently updated.
 
 ```json
-{ "event": "open", "ts": "2026-04-22T23:10:36.936Z", "source": "zwave-node-3" }
+{
+  "state": "open",
+  "ts": "2026-04-22T23:10:36.936Z",
+  "battery":   { "level": 62, "ts": "2026-04-22T23:05:00.000Z" },
+  "reachable": { "value": true, "ts": "2026-04-22T23:10:36.936Z" },
+  "tamper":    null,
+  "source":    "zwave-node-3"
+}
 ```
 
-Before any event has been received: `{ "event": null, "ts": null, "source": null }`.
+Field semantics:
+- `state` / `ts` — present only for contact-type nodes. `state ∈ { "open", "closed", null }`; `ts` is the timestamp of the last event that produced `state`.
+- `battery` — Battery CC (128) level, 0-100. `null` until first report.
+- `reachable` — Derived from zwave-js node status (`alive` → `true`; `dead`/`failed`/`offline` → `false`).
+- `tamper` — `{ active: bool, ts: iso8601 }` or `null` until supported by the device.
+- `source` — `"zwave-node-<N>"` identifying the origin radio node.
+
+Before any telemetry has been received for a node, PZB does not publish `state` at all (consumers should treat missing retained state as "unknown"). On driver disconnect PZB publishes `reachable: { value: false, ... }`.
+
+## 8a. Per-Node Schema (`{node.base_topic}/schema`)
+
+Retained. Published once per configured node on PZB startup (and again on Z-Wave driver reconnect). Describes the node's topic layout and payload shapes so consumers can bind without hard-coding.
+
+```json
+{
+  "application": "pzb",
+  "label": "spell-box",
+  "radio": "zwave",
+  "type": "contact",
+  "node_id": 8,
+  "topics": {
+    "events":   "paradox/houdini/zwave/spell-box/events",
+    "state":    "paradox/houdini/zwave/spell-box/state",
+    "commands": "paradox/houdini/zwave/spell-box/commands",
+    "warnings": "paradox/houdini/zwave/spell-box/warnings"
+  },
+  "event_values": ["open", "close"],
+  "state_fields": {
+    "state":     "'open' | 'closed' | null",
+    "ts":        "iso8601 | null",
+    "battery":   "{ level: 0-100, ts: iso8601 } | null",
+    "reachable": "{ value: boolean, ts: iso8601 } | null",
+    "tamper":    "{ active: boolean, ts: iso8601 } | null",
+    "source":    "'zwave-node-N' | null"
+  },
+  "retention": { "events": true, "state": true, "schema": true }
+}
+```
 
 ## 9. Per-Node Commands (`{node.base_topic}/commands`)
 
@@ -160,9 +206,9 @@ Standard codes:
 - `COMMAND_TIMEOUT`
 - `COMMAND_UNSUPPORTED`
 
-## 11. Compatibility with PFx
+## 11. Relationship with PFx
 
-The `events` payload intentionally uses the minimal `{"event":"open"|"close"}` shape. PFx `InputZone` in MQTT consumer mode only requires the `event` field, so an existing PFx `input_topic` pointing at `{node.base_topic}/events` works with zero PFx changes.
+PFx no longer consumes radio events; Z-Wave / Zigbee I/O is owned entirely by PZB. Consumers such as PxO, PxT, and dashboards subscribe directly to the per-node topics described above. Future PFx integration is limited to outbound adapter work (translating generic light/relay commands into PZB `{node.base_topic}/commands` payloads). Do not add `[input:*]` sections in PFx INI for zwave/zigbee sensors.
 
 ## 12. Versioning
 
