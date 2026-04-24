@@ -53,7 +53,7 @@ INI file. One file per process. Sections:
 - `[mqtt]` — broker connection + `base_topic`.
 - `[global]` — log level, heartbeat interval, discovered topic prefix.
 - `[zwave]` — serial port, network key(s), enable flag.
-- `[zigbee]` — serial port, adapter type, db path, enable flag (phase 3).
+- `[zigbee]` — serial port, adapter type, db path, enable flag.
 - `[node:<label>]` — one per known device.
 
 See [CONFIG_INI.md](CONFIG_INI.md) for full key list.
@@ -61,7 +61,7 @@ See [CONFIG_INI.md](CONFIG_INI.md) for full key list.
 ## 8. Node Identification
 
 - Z-Wave nodes are identified by integer `node_id` (1–232).
-- Zigbee devices are identified by `ieee` address (phase 3).
+- Zigbee devices are identified by `ieee` address.
 - Each node has an operator-chosen `label` used in MQTT topics and logs.
 - Discovered-but-unconfigured nodes get a default label `discovered-<nodeId>` (Z-Wave) or `discovered-<ieeeTail>` (Zigbee).
 
@@ -176,11 +176,12 @@ Warnings are JSON: `{ "timestamp", "severity": "info|warn|error", "code", "messa
 
 ## 18. Out-of-Scope in Phase 1
 
-- Zigbee support (phase 3).
 - Thread support (future phase).
 - Multilevel sensors, thermostats, locks.
 - Web UI.
 - TLS, ACL enforcement on MQTT.
+
+(Zigbee was moved out of scope for phase 1 and is now implemented as of phase 3.)
 
 ## 19. Supported Devices
 
@@ -196,7 +197,7 @@ This section tracks real-world device validation for PZB. Device profile documen
 
 | Vendor | Model | Device Type | Validation Status | Profile |
 |--------|-------|-------------|-------------------|---------|
-| Third Reality | 3RDS17BZ Door Sensor | Contact sensor | Planned for next phase (not yet validated in PZB) | [Third Reality 3RDS17BZ](supported/third-reality-3rds17bz.md) |
+| Third Reality | 3RDS17BZ Door Sensor | Contact sensor | PZB support implemented; hardware validation pending | [Third Reality 3RDS17BZ](supported/third-reality-3rds17bz.md) |
 
 ## 20. References
 

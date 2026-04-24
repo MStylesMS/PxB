@@ -30,6 +30,10 @@ function parseArgs(argv) {
             args.nodeId = parseInt(argv[++i], 10);
         } else if (a === '--timeout-s' && argv[i + 1]) {
             args.timeoutS = parseInt(argv[++i], 10);
+        } else if (a === '--radio' && argv[i + 1]) {
+            args.radio = String(argv[++i]).toLowerCase();
+        } else if (a === '--ieee' && argv[i + 1]) {
+            args.ieee = argv[++i];
         } else if (!a.startsWith('-')) {
             args.positional.push(a);
         }
@@ -154,9 +158,9 @@ function cmdHelp() {
         'Subcommands:\n' +
         '  status                        Print current bridge status (reads from MQTT)\n' +
         '  list-nodes                    Print configured nodes from INI (no broker needed)\n' +
-        '  include [--timeout-s N]       Begin Z-Wave inclusion\n' +
+        '  include [--radio R] [--timeout-s N]  Begin inclusion (radio=zwave|zigbee)\n' +
         '  stop-include                  Abort in-progress inclusion\n' +
-        '  exclude [--timeout-s N]       Begin Z-Wave exclusion\n' +
+        '  exclude [--radio R] [--timeout-s N]  Begin exclusion (zwave only; zigbee has no mode)\n' +
         '  stop-exclude                  Abort in-progress exclusion\n' +
         '  relay <label> on|off|pulse    Send relay command to a configured node\n' +
         '                                (with --ms N for pulse duration)\n' +
@@ -168,7 +172,9 @@ function cmdHelp() {
         '  --config, -c <path>           Path to pzb.ini  (required)\n' +
         '  --timeout <ms>                Timeout for status/discovery commands (default: 5000)\n' +
         '  --ms <N>                      Pulse duration in ms (for `relay <label> pulse`)\n' +
-        '  --timeout-s <N>               Inclusion/exclusion timeout seconds\n'
+        '  --timeout-s <N>               Inclusion/exclusion timeout seconds\n' +
+        '  --radio <zwave|zigbee>        Target radio (default: zwave)\n' +
+        '  --ieee <0x...>                Zigbee IEEE address (for refresh/remove)\n'
     );
 }
 
@@ -204,47 +210,75 @@ async function _publishBridgeCommand(config, command, extra = {}) {
     process.stdout.write(`${command} sent.\n`);
 }
 
+function _radioExtra(args) {
+    return args.radio ? { radio: args.radio } : {};
+}
+
 async function cmdInclude(args) {
     const config = _loadConfigOrExit(requireConfig(args));
-    await _publishBridgeCommand(config, 'startInclusion',
-        args.timeoutS ? { timeout_s: args.timeoutS } : {});
+    const extra = { ..._radioExtra(args) };
+    if (args.timeoutS) extra.timeout_s = args.timeoutS;
+    await _publishBridgeCommand(config, 'startInclusion', extra);
 }
 
 async function cmdStopInclude(args) {
     const config = _loadConfigOrExit(requireConfig(args));
-    await _publishBridgeCommand(config, 'stopInclusion');
+    await _publishBridgeCommand(config, 'stopInclusion', _radioExtra(args));
 }
 
 async function cmdExclude(args) {
     const config = _loadConfigOrExit(requireConfig(args));
-    await _publishBridgeCommand(config, 'startExclusion',
-        args.timeoutS ? { timeout_s: args.timeoutS } : {});
+    const extra = { ..._radioExtra(args) };
+    if (args.timeoutS) extra.timeout_s = args.timeoutS;
+    await _publishBridgeCommand(config, 'startExclusion', extra);
 }
 
 async function cmdStopExclude(args) {
     const config = _loadConfigOrExit(requireConfig(args));
-    await _publishBridgeCommand(config, 'stopExclusion');
+    await _publishBridgeCommand(config, 'stopExclusion', _radioExtra(args));
 }
 
 async function cmdRefreshNode(args) {
     const config = _loadConfigOrExit(requireConfig(args));
     const target = args.positional[1];
-    if (!target) {
-        process.stderr.write('Usage: pzb refresh-node <label|node_id> --config <path>\n');
+    if (!target && !args.ieee) {
+        process.stderr.write('Usage: pzb refresh-node <label|node_id|ieee> [--radio zwave|zigbee] --config <path>\n');
         process.exit(1);
     }
-    const extra = /^\d+$/.test(target) ? { node_id: Number(target) } : { label: target };
+    let extra = { ..._radioExtra(args) };
+    if (args.ieee) {
+        extra.ieee = args.ieee;
+        if (!extra.radio) extra.radio = 'zigbee';
+    } else if (/^0x[0-9a-fA-F]+$/.test(target)) {
+        extra.ieee = target;
+        if (!extra.radio) extra.radio = 'zigbee';
+    } else if (/^\d+$/.test(target)) {
+        extra.node_id = Number(target);
+        if (!extra.radio) extra.radio = 'zwave';
+    } else {
+        extra.label = target;
+    }
     await _publishBridgeCommand(config, 'refreshNode', extra);
 }
 
 async function cmdRemoveFailedNode(args) {
     const config = _loadConfigOrExit(requireConfig(args));
     const target = args.positional[1];
-    if (!target || !/^\d+$/.test(target)) {
-        process.stderr.write('Usage: pzb remove-failed-node <node_id> --config <path>\n');
+    let extra = { ..._radioExtra(args) };
+    if (args.ieee) {
+        extra.ieee = args.ieee;
+        if (!extra.radio) extra.radio = 'zigbee';
+    } else if (target && /^0x[0-9a-fA-F]+$/.test(target)) {
+        extra.ieee = target;
+        if (!extra.radio) extra.radio = 'zigbee';
+    } else if (target && /^\d+$/.test(target)) {
+        extra.node_id = Number(target);
+        if (!extra.radio) extra.radio = 'zwave';
+    } else {
+        process.stderr.write('Usage: pzb remove-failed-node <node_id|ieee> [--radio zwave|zigbee] --config <path>\n');
         process.exit(1);
     }
-    await _publishBridgeCommand(config, 'removeFailedNode', { node_id: Number(target) });
+    await _publishBridgeCommand(config, 'removeFailedNode', extra);
 }
 
 async function cmdRelay(args) {

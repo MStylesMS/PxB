@@ -12,6 +12,9 @@ const { BridgeCommandHandler } = require('./bridge/command-handler');
 const { ZWaveDriver } = require('./radios/zwave/driver');
 const { ZWaveEvents } = require('./radios/zwave/events');
 const { ZWaveInclusion } = require('./radios/zwave/inclusion');
+const { ZigbeeDriver } = require('./radios/zigbee/driver');
+const { ZigbeeEvents } = require('./radios/zigbee/events');
+const { ZigbeeInclusion } = require('./radios/zigbee/inclusion');
 const { NodeCommandHandler } = require('./bridge/node-command-handler');
 const { DiscoveredStore } = require('./discovery/discovered-store');
 const { bridgeTopics } = require('./mqtt/contract');
@@ -143,21 +146,94 @@ async function main() {
         });
     }
 
+    // --- Zigbee driver (constructed eagerly; started after MQTT is up) ---
+    let zigbeeDriver = null;
+    let zigbeeEvents = null;
+    let zigbeeInclusion = null;
+    if (config.zigbee && config.zigbee.enabled) {
+        // Build network opts only when the caller has configured something;
+        // herdsman auto-generates pan_id, extended_pan_id, channel, and
+        // network_key when the network object is absent.
+        const zNet = {};
+        if (config.zigbee.pan_id !== undefined)          zNet.panId = config.zigbee.pan_id;
+        if (config.zigbee.extended_pan_id !== undefined) zNet.extendedPanId = config.zigbee.extended_pan_id;
+        if (config.zigbee.channel !== undefined)         zNet.channel = config.zigbee.channel;
+        if (config.zigbee.network_key !== undefined)     zNet.networkKey = config.zigbee.network_key;
+
+        zigbeeDriver = new ZigbeeDriver({
+            port: config.zigbee.port,
+            adapter: config.zigbee.adapter,
+            baudRate: config.zigbee.baud_rate,
+            databasePath: config.zigbee.db_path,
+            network: Object.keys(zNet).length ? zNet : null,
+        });
+
+        zigbeeDriver.on('warning', (w) => {
+            publishBridgeWarning(mqtt, config.mqtt.base_topic, w);
+        });
+        zigbeeDriver.on('state-changed', () => {
+            if (heartbeat) heartbeat.flush();
+        });
+
+        zigbeeEvents = new ZigbeeEvents({ zigbeeDriver, nodeRegistry, mqttClient: mqtt });
+
+        zigbeeInclusion = new ZigbeeInclusion({
+            zigbeeDriver,
+            defaultTimeoutMs: (config.zigbee.include_timeout_s || 60) * 1000,
+        });
+        zigbeeInclusion.on('warning', (w) => {
+            publishBridgeWarning(mqtt, config.mqtt.base_topic, w);
+        });
+        zigbeeInclusion.on('state-changed', () => {
+            if (heartbeat) heartbeat.flush();
+        });
+
+        zigbeeDriver.on('zigbee-device-joined', ({ ieee }) => {
+            const device = zigbeeDriver.getDeviceByIeee(ieee);
+            if (!device) return;
+            const { descriptor, fragment } = discoveredStore.recordZigbee(device);
+            const tail = descriptor.ieee ? descriptor.ieee.slice(-4) : 'xxxx';
+            const topic = bridgeTopics(config.mqtt.base_topic).discovered('zigbee', tail);
+            mqtt.publish(topic, {
+                timestamp: new Date().toISOString(),
+                radio: 'zigbee',
+                ieee,
+                descriptor,
+                fragment,
+            }, { retain: true });
+            logger.info(`Discovered node zigbee-${tail} published to ${topic}`);
+        });
+        zigbeeDriver.on('zigbee-device-left', ({ ieee }) => {
+            const normalized = (ieee || '').toString().toLowerCase();
+            const tail = normalized.slice(-4) || 'xxxx';
+            discoveredStore.forgetZigbee(ieee);
+            const topic = bridgeTopics(config.mqtt.base_topic).discovered('zigbee', tail);
+            mqtt.publish(topic, '', { retain: true });
+        });
+    }
+
     // Build status generator for heartbeat
     function buildStatus(overrides = {}) {
         const zwaveStatus = zwaveDriver
             ? { ...zwaveDriver.getStatus() }
             : (config.zwave ? { enabled: false } : { enabled: false });
 
-        // Derive overall bridge state from radio state(s)
+        const zigbeeStatus = zigbeeDriver
+            ? { ...zigbeeDriver.getStatus() }
+            : (config.zigbee ? { enabled: config.zigbee.enabled, connected: false } : { enabled: false });
+
+        // Derive overall bridge state from the combined radio state(s).
         let overall = 'ok';
-        if (zwaveDriver) {
-            const s = zwaveDriver.state;
-            if (s === 'starting') overall = 'starting';
-            else if (s === 'degraded') overall = 'degraded';
-            else if (s === 'error') overall = 'degraded';
-            else if (s === 'stopped') overall = 'starting';
-        }
+        const radioStates = [];
+        if (zwaveDriver) radioStates.push(zwaveDriver.state);
+        if (zigbeeDriver) radioStates.push(zigbeeDriver.state);
+        if (radioStates.some((s) => s === 'starting' || s === 'stopped')) overall = 'starting';
+        if (radioStates.some((s) => s === 'degraded' || s === 'error')) overall = 'degraded';
+
+        // Combine inclusion status (only one can be active at a time in practice).
+        let inclusion = { active: false, radio: null, mode: null, started_at: null, timeout_ms: null };
+        if (zwaveInclusion && zwaveInclusion.getStatus().active) inclusion = zwaveInclusion.getStatus();
+        else if (zigbeeInclusion && zigbeeInclusion.getStatus().active) inclusion = zigbeeInclusion.getStatus();
 
         return {
             timestamp: new Date().toISOString(),
@@ -168,12 +244,10 @@ async function main() {
             host: require('os').hostname(),
             radios: {
                 zwave: zwaveStatus,
-                zigbee: config.zigbee ? { enabled: config.zigbee.enabled, connected: false } : { enabled: false },
+                zigbee: zigbeeStatus,
             },
             nodes: nodeRegistry.getSummary(),
-            inclusion: zwaveInclusion
-                ? zwaveInclusion.getStatus()
-                : { active: false, radio: null, mode: null, started_at: null, timeout_ms: null },
+            inclusion,
             ...overrides,
         };
     }
@@ -204,6 +278,8 @@ async function main() {
         publishWarning: (w) => publishBridgeWarning(mqtt, config.mqtt.base_topic, w),
         zwaveInclusion,
         zwaveDriver,
+        zigbeeInclusion,
+        zigbeeDriver,
         nodeRegistry,
     });
 
@@ -214,6 +290,8 @@ async function main() {
         nodeRegistry,
         zwaveDriver,
         zwaveEvents,
+        zigbeeDriver,
+        zigbeeEvents,
     });
 
     // --- Z-Wave startup (non-fatal: failures schedule reconnect) ---
@@ -222,7 +300,15 @@ async function main() {
             await zwaveDriver.start();
         } catch (err) {
             logger.error(`Z-Wave initial start failed (will retry): ${err.message}`);
-            // Driver has already scheduled a reconnect and published a warning.
+        }
+    }
+
+    // --- Zigbee startup (non-fatal: failures schedule reconnect) ---
+    if (zigbeeDriver) {
+        try {
+            await zigbeeDriver.start();
+        } catch (err) {
+            logger.error(`Zigbee initial start failed (will retry): ${err.message}`);
         }
     }
 
@@ -231,6 +317,9 @@ async function main() {
         logger.info(`Received ${signal} — shutting down`);
         if (zwaveDriver) {
             try { await zwaveDriver.stop(); } catch (err) { logger.warn(`Z-Wave stop error: ${err.message}`); }
+        }
+        if (zigbeeDriver) {
+            try { await zigbeeDriver.stop(); } catch (err) { logger.warn(`Zigbee stop error: ${err.message}`); }
         }
         heartbeat.flush({ state: 'stopping' });
         heartbeat.stop();

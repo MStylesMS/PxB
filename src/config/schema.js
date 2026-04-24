@@ -37,9 +37,13 @@ const SCHEMA = {
         enabled: { required: false, type: 'bool', default: true },
         port: { required: true, type: 'path' },
         adapter: { required: false, type: 'string', default: 'ember' },
+        baud_rate: { required: false, type: 'int', default: 115200 },
         db_path: { required: false, type: 'path' },
         pan_id: { required: false, type: 'string' },
+        extended_pan_id: { required: false, type: 'string' },
+        channel: { required: false, type: 'int', default: 11 },
         network_key: { required: false, type: 'string' },
+        include_timeout_s: { required: false, type: 'int', default: 60 },
     },
     node: {
         radio: { required: true, type: 'string' },

@@ -3,6 +3,7 @@
 const logger = require('../util/logger');
 const { nodeTopics } = require('../mqtt/contract');
 const { setBinarySwitch, pulseBinarySwitch } = require('../radios/zwave/commands');
+const { setOnOff, pulseOnOff } = require('../radios/zigbee/commands');
 
 /**
  * NodeCommandHandler — subscribes to `{nodeBaseTopic}/commands` for every
@@ -24,12 +25,16 @@ class NodeCommandHandler {
      * @param {import('./node-registry').NodeRegistry} opts.nodeRegistry
      * @param {import('../radios/zwave/driver').ZWaveDriver} [opts.zwaveDriver]
      * @param {import('../radios/zwave/events').ZWaveEvents} [opts.zwaveEvents]
+     * @param {import('../radios/zigbee/driver').ZigbeeDriver} [opts.zigbeeDriver]
+     * @param {import('../radios/zigbee/events').ZigbeeEvents} [opts.zigbeeEvents]
      */
-    constructor({ mqttClient, nodeRegistry, zwaveDriver, zwaveEvents }) {
+    constructor({ mqttClient, nodeRegistry, zwaveDriver, zwaveEvents, zigbeeDriver, zigbeeEvents }) {
         this._mqtt = mqttClient;
         this._registry = nodeRegistry;
         this._zwaveDriver = zwaveDriver || null;
         this._zwaveEvents = zwaveEvents || null;
+        this._zigbeeDriver = zigbeeDriver || null;
+        this._zigbeeEvents = zigbeeEvents || null;
 
         for (const entry of this._registry.getAll()) {
             if (!entry.base_topic) continue;
@@ -77,7 +82,11 @@ class NodeCommandHandler {
         }
         const value = stateStr === 'on';
         try {
-            await setBinarySwitch(this._zwaveDriver, entry.node_id, value);
+            if (entry.radio === 'zigbee') {
+                await setOnOff(this._zigbeeDriver, entry.ieee, value);
+            } else {
+                await setBinarySwitch(this._zwaveDriver, entry.node_id, value);
+            }
             this._echoRelay(entry, stateStr);
         } catch (err) {
             this._warn(entry, 'error', err.code || 'COMMAND_FAILED', err.message, {
@@ -94,8 +103,11 @@ class NodeCommandHandler {
         }
         const ms = Number(payload.ms) || 500;
         try {
-            await pulseBinarySwitch(this._zwaveDriver, entry.node_id, ms);
-            // After pulse, relay is off again.
+            if (entry.radio === 'zigbee') {
+                await pulseOnOff(this._zigbeeDriver, entry.ieee, ms);
+            } else {
+                await pulseBinarySwitch(this._zwaveDriver, entry.node_id, ms);
+            }
             this._echoRelay(entry, 'off');
         } catch (err) {
             this._warn(entry, 'error', err.code || 'COMMAND_FAILED', err.message, {
@@ -105,24 +117,31 @@ class NodeCommandHandler {
     }
 
     _isRelayCapable(entry) {
-        if (entry.radio !== 'zwave') return false;
-        if (!this._zwaveDriver || !this._zwaveDriver.connected) return false;
-        return entry.type === 'relay' || entry.type === 'switch';
+        if (entry.type !== 'relay' && entry.type !== 'switch') return false;
+        if (entry.radio === 'zwave') {
+            return !!(this._zwaveDriver && this._zwaveDriver.connected);
+        }
+        if (entry.radio === 'zigbee') {
+            return !!(this._zigbeeDriver && this._zigbeeDriver.connected);
+        }
+        return false;
     }
 
     _echoRelay(entry, value) {
         const { changed } = this._registry.updateSignal(entry.label, 'relay', value);
-        // Record as last_event so state payload includes it.
         const normalized = { type: 'relay', value };
+        const source = entry.radio === 'zigbee'
+            ? `zigbee-${entry.ieee}`
+            : `zwave-node-${entry.node_id}`;
         this._registry.setLastEvent(entry.label, {
             event: normalized,
             ts: new Date().toISOString(),
-            source: `zwave-node-${entry.node_id}`,
+            source,
         });
-        // Always publish (on-change semantics apply to true change only; we
-        // republish state regardless so operators see the command took effect).
-        if (this._zwaveEvents && typeof this._zwaveEvents.publishNodeState === 'function') {
-            this._zwaveEvents.publishNodeState(entry);
+        // Prefer radio-specific publisher so state payload carries the right schema.
+        const pub = entry.radio === 'zigbee' ? this._zigbeeEvents : this._zwaveEvents;
+        if (pub && typeof pub.publishNodeState === 'function') {
+            pub.publishNodeState(entry);
         }
         logger.info(`Relay ${entry.label} → ${value}${changed ? '' : ' (unchanged)'}`);
     }

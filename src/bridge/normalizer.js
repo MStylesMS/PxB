@@ -99,4 +99,67 @@ function normalizeBattery(commandClass, property, value) {
     return Math.round(n);
 }
 
-module.exports = { normalizeContact, normalizeBattery, NOTIFICATION_ACCESS_CONTROL_MAP };
+/**
+ * Normalize a Zigbee `message` event into a contact event token.
+ *
+ * Handled inputs (from `zigbee-herdsman` message events):
+ *
+ *   1. IAS Zone cluster (`ssIasZone`):
+ *      - `commandStatusChangeNotification` with `data.zonestatus` — bit 0
+ *        (`alarm1`) = open; 0 = closed.
+ *      - `attributeReport` with `data.zoneStatus` — same bit semantics.
+ *   2. On/Off cluster (`genOnOff`) `attributeReport` with `data.onOff` —
+ *      mostly used for relay/switch echo but returns `'open'`/`'close'` so
+ *      contact-style devices reporting via genOnOff also work.
+ *
+ * Returns null when the value cannot be mapped.
+ *
+ * @param {string} cluster   - herdsman cluster name (e.g. 'ssIasZone', 'genOnOff')
+ * @param {string} type      - message type (e.g. 'attributeReport', 'commandStatusChangeNotification')
+ * @param {object} data      - herdsman message payload
+ * @returns {'open'|'close'|null}
+ */
+function normalizeZigbeeContact(cluster, type, data) {
+    if (!cluster || !data || typeof data !== 'object') return null;
+
+    if (cluster === 'ssIasZone') {
+        const zoneStatus = data.zonestatus ?? data.zoneStatus;
+        if (typeof zoneStatus === 'number') {
+            // bit 0 = alarm1 (Open/Alarm), bit 1 = alarm2. Either set → open.
+            return (zoneStatus & 0x03) ? 'open' : 'close';
+        }
+        return null;
+    }
+
+    if (cluster === 'genOnOff') {
+        if (typeof data.onOff === 'number' || typeof data.onOff === 'boolean') {
+            return data.onOff ? 'open' : 'close';
+        }
+        return null;
+    }
+
+    return null;
+}
+
+/**
+ * Normalize a Zigbee battery attribute report.
+ *
+ * Handles `genPowerCfg` cluster `batteryPercentageRemaining` where values are
+ * in 0.5% units (0–200 → 0–100%). Returns an integer 0–100 or null.
+ */
+function normalizeZigbeeBattery(cluster, type, data) {
+    if (cluster !== 'genPowerCfg' || !data || typeof data !== 'object') return null;
+    const raw = data.batteryPercentageRemaining;
+    if (typeof raw !== 'number') return null;
+    const pct = Math.round(raw / 2);
+    if (pct < 0 || pct > 100) return null;
+    return pct;
+}
+
+module.exports = {
+    normalizeContact,
+    normalizeBattery,
+    normalizeZigbeeContact,
+    normalizeZigbeeBattery,
+    NOTIFICATION_ACCESS_CONTROL_MAP,
+};

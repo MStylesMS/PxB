@@ -11,7 +11,7 @@ PZB is configured by a single INI file. Pass the path via `--config` or default 
 | `[mqtt]` | MQTT broker connection + base_topic | 1 |
 | `[global]` | Process-wide defaults | 0–1 |
 | `[zwave]` | Z-Wave radio endpoint | 0–1 |
-| `[zigbee]` | Zigbee radio endpoint (phase 3) | 0–1 |
+| `[zigbee]` | Zigbee radio endpoint | 0–1 |
 | `[node:<label>]` | One configured device | 0–N |
 
 ## `[mqtt]`
@@ -53,16 +53,21 @@ PZB is configured by a single INI file. Pass the path via `--config` or default 
 
 File permissions should be `0600` when keys are present.
 
-## `[zigbee]` (Phase 3 — not yet implemented)
+## `[zigbee]`
 
 | Key | Type | Required | Default | Description |
 |-----|------|:--------:|---------|-------------|
 | `enabled` | bool | no | `true` | |
 | `port` | path | yes | — | Stable serial path |
-| `adapter` | string | no | `ember` | `ember`, `zstack`, etc. |
+| `adapter` | string | no | `ember` | `ember`, `zstack`, `deconz`, `ezsp` |
 | `db_path` | path | no | `zigbee.db` next to config | Coordinator state DB |
 | `pan_id` | hex | no | auto | |
+| `extended_pan_id` | hex | no | auto | |
+| `channel` | int | no | `11` | 802.15.4 channel (11–26) |
 | `network_key` | hex | no | auto | |
+| `include_timeout_s` | int | no | `60` | Default `permitJoin` window |
+
+File permissions should be `0600` when `network_key` is set.
 
 ## `[node:<label>]`
 

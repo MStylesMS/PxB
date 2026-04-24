@@ -55,6 +55,33 @@ describe('NodeRegistry: getByZWaveId', () => {
     });
 });
 
+describe('NodeRegistry: getByIeee', () => {
+    test('finds zigbee node by normalized IEEE address', () => {
+        const reg = new NodeRegistry({
+            'zb-door': {
+                radio: 'zigbee', type: 'contact',
+                ieee: '0x00124B0012345678',
+                base_topic: 'paradox/houdini/zigbee/zb-door',
+                input_channel: '0', description: '',
+            },
+        });
+        expect(reg.getByIeee('0x00124b0012345678').label).toBe('zb-door');
+        // Case-insensitive
+        expect(reg.getByIeee('0x00124B0012345678').label).toBe('zb-door');
+        // Without 0x prefix
+        expect(reg.getByIeee('00124b0012345678').label).toBe('zb-door');
+    });
+    test('returns null for unknown IEEE', () => {
+        const reg = makeRegistry();
+        expect(reg.getByIeee('0x0000000000000000')).toBeNull();
+    });
+    test('returns null for falsy input', () => {
+        const reg = makeRegistry();
+        expect(reg.getByIeee(null)).toBeNull();
+        expect(reg.getByIeee('')).toBeNull();
+    });
+});
+
 describe('NodeRegistry: setStatus', () => {
     test('returns true when status changes', () => {
         const reg = makeRegistry();

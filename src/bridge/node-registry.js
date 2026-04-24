@@ -47,6 +47,19 @@ class NodeRegistry {
         return null;
     }
 
+    /**
+     * Return first Zigbee entry whose IEEE address matches (case-insensitive,
+     * with optional `0x` prefix and left-padded to 16 hex digits).
+     */
+    getByIeee(ieee) {
+        const target = _normalizeIeee(ieee);
+        if (!target) return null;
+        for (const entry of Object.values(this._nodes)) {
+            if (entry.radio === 'zigbee' && _normalizeIeee(entry.ieee) === target) return entry;
+        }
+        return null;
+    }
+
     /** Return all entries as an array. */
     getAll() {
         return Object.values(this._nodes);
@@ -116,6 +129,14 @@ class NodeRegistry {
         }
         return counts;
     }
+}
+
+/** Case-insensitive normalization of an IEEE address to `0x` + 16 hex digits. */
+function _normalizeIeee(raw) {
+    if (!raw) return null;
+    const s = String(raw).trim().toLowerCase().replace(/^0x/, '').replace(/[^0-9a-f]/g, '');
+    if (!s) return null;
+    return `0x${s.padStart(16, '0')}`;
 }
 
 module.exports = { NodeRegistry };

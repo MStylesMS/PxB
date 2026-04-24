@@ -15,7 +15,7 @@ Introduce **PZB (Paradox Z Bridge)**, a focused Node.js service that owns Z-Wave
 
 ## Goals
 
-1. Single Node.js process per host managing one radio (Z-Wave first, Zigbee phase 3).
+1. Single Node.js process per host managing one or both radios (Z-Wave + Zigbee implemented; Thread deferred).
 2. INI configuration following Paradox conventions.
 3. Retained bridge heartbeat every `heartbeat_interval` seconds (default 10s).
 4. Retained per-node `events` and `state` **only on change**.
@@ -151,15 +151,17 @@ Gate: failed-node scenario reproduced on bench and recovered via command.
 
 ---
 
-## Phase 3 — Zigbee (Deferred Until Z-Wave Phase 2 Gates Pass)
+## Phase 3 — Zigbee
 
-- [ ] Add `zigbee-herdsman`. 🟢
-- [ ] Mirror `radios/zwave/` layout as `radios/zigbee/`. 🔵
-- [ ] Extend schema for `[zigbee]` + `ieee` node key. 🟢
-- [ ] Support contact + on/off light/relay only in first Zigbee cut. 🔵
-- [ ] Discovery + INI generator extension for Zigbee. 🟢
+- [x] Add `zigbee-herdsman`. 🟢
+- [x] Mirror `radios/zwave/` layout as `radios/zigbee/` (driver, inclusion, commands, events). 🟢
+- [x] Extend schema for `[zigbee]` + `ieee` node key. 🟢
+- [x] Support contact (`ssIasZone`) + on/off (`genOnOff`) relay/switch in first Zigbee cut. 🟢
+- [x] Discovery + INI generator extension for Zigbee. 🟢
+- [x] Bridge dispatcher accepts `radio: "zigbee"` for inclusion/exclusion/refresh/removeFailedNode. 🟢
+- [x] Unit-tested against mock herdsman Controller; hardware validation pending. 🟢
 
-Gate: at least one contact sensor and one on/off endpoint working on real HUSBZB-1 Zigbee radio.
+Gate: at least one contact sensor and one on/off endpoint working on real HUSBZB-1 Zigbee radio — *hardware validation pending*.
 
 ---
 
