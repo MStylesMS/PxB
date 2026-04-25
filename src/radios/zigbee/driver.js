@@ -27,13 +27,16 @@ const logger = require('../../util/logger');
  *   'zigbee-device-left'   — { ieee }
  *   'zigbee-device-interview' — { ieee, status }
  *   'zigbee-message'       — { ieee, endpointId, cluster, type, data, linkquality }
+ *
+ * This driver is pinned to the Ember adapter path for Sonoff EFR32MG21
+ * coordinators (Dongle-LMG21 / Dongle Plus-E class hardware).
  */
 class ZigbeeDriver extends EventEmitter {
     /**
      * @param {object} opts
-     * @param {string} opts.port              - stable serial path (e.g. /dev/serial/by-id/...)
-     * @param {string} [opts.adapter='ember'] - herdsman adapter: ember|zstack|deconz|ezsp
-     * @param {number} [opts.baudRate=115200]  - serial baud rate (HUSBZB-1 Zigbee needs 57600)
+    * @param {string} opts.port              - stable serial path (e.g. /dev/serial/by-id/...)
+    * @param {string} [opts.adapter='ember'] - accepted only as 'ember' (legacy values rejected)
+    * @param {number} [opts.baudRate=115200] - serial baud rate
      * @param {string} [opts.databasePath]    - devices DB path
      * @param {object} [opts.network]         - { panId, extendedPanId, channel, networkKey }
      * @param {object} [opts.controllerFactory] - injectable for tests; defaults to herdsman.Controller
@@ -43,9 +46,12 @@ class ZigbeeDriver extends EventEmitter {
     constructor(opts) {
         super();
         if (!opts || !opts.port) throw new Error('ZigbeeDriver: port is required');
+        if (opts.adapter && opts.adapter !== 'ember') {
+            throw new Error(`ZigbeeDriver: unsupported adapter "${opts.adapter}" (expected "ember")`);
+        }
 
         this._port = opts.port;
-        this._adapter = opts.adapter || 'ember';
+        this._adapter = 'ember';
         this._baudRate = opts.baudRate || 115200;
         this._databasePath = opts.databasePath || null;
         this._network = opts.network || null;

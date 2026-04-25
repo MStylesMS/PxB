@@ -161,7 +161,7 @@ Gate: failed-node scenario reproduced on bench and recovered via command.
 - [x] Bridge dispatcher accepts `radio: "zigbee"` for inclusion/exclusion/refresh/removeFailedNode. 🟢
 - [x] Unit-tested against mock herdsman Controller; hardware validation pending. 🟢
 
-Gate: at least one contact sensor and one on/off endpoint working on real HUSBZB-1 Zigbee radio — *hardware validation pending*.
+Gate: at least one contact sensor and one on/off endpoint working on Sonoff EFR32MG21 Zigbee radio (Dongle-LMG21 class) — *hardware validation pending*.
 
 ---
 

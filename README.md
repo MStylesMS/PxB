@@ -4,7 +4,7 @@ PZB is a **simple, focused Z-Wave / Zigbee / Thread to MQTT bridge** for the Par
 
 ## What It Does
 
-- Connects to a combined Z-Wave + Zigbee USB hub (e.g. HUSBZB-1) or single-radio USB sticks.
+- Connects to Z-Wave and Zigbee USB radios; Zigbee is targeted at Sonoff EFR32MG21 coordinators (Dongle-LMG21 class) on the Ember adapter path.
 - Publishes a **retained** heartbeat/status for the bridge process itself on a fixed interval (default 10s).
 - Publishes **retained on-change** node events and state for contact sensors, relays, etc.
 - Accepts commands over MQTT (pairing, relay control, diagnostics) and an equivalent CLI.

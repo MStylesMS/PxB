@@ -57,6 +57,24 @@ function waitForEvent(emitter, event, timeoutMs = 200) {
 }
 
 describe('ZigbeeDriver', () => {
+    test('constructor rejects unsupported adapter values', () => {
+        expect(() => {
+            new ZigbeeDriver({
+                port: '/dev/ttyUSB1',
+                adapter: 'zstack',
+                controllerFactory: makeFactory(),
+            });
+        }).toThrow('unsupported adapter');
+    });
+
+    test('constructor pins adapter to ember when omitted', () => {
+        const d = new ZigbeeDriver({
+            port: '/dev/ttyUSB1',
+            controllerFactory: makeFactory(),
+        });
+        expect(d.getStatus().adapter).toBe('ember');
+    });
+
     test('start(): enters connected on successful controller start', async () => {
         const behavior = { startBehavior: 'success' };
         const d = new ZigbeeDriver({

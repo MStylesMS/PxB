@@ -162,7 +162,6 @@ async function main() {
 
         zigbeeDriver = new ZigbeeDriver({
             port: config.zigbee.port,
-            adapter: config.zigbee.adapter,
             baudRate: config.zigbee.baud_rate,
             databasePath: config.zigbee.db_path,
             network: Object.keys(zNet).length ? zNet : null,

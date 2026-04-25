@@ -10,7 +10,7 @@ PZB (Paradox Z Bridge) is a single-process Node.js service that bridges Z-Wave (
 
 - Z-Wave via `zwave-js` using any zwave-js-supported USB controller.
 - Reference hardware: HUSBZB-1 (Z-Wave endpoint).
-- Zigbee and Thread support are planned; Zigbee targets `zigbee-herdsman` with the Ember adapter on HUSBZB-1.
+- Zigbee support uses `zigbee-herdsman` with the Ember adapter on Sonoff EFR32MG21 coordinators (Dongle-LMG21 class).
 
 ## 3. Supported Device Classes
 
@@ -53,7 +53,7 @@ INI file. One file per process. Sections:
 - `[mqtt]` — broker connection + `base_topic`.
 - `[global]` — log level, heartbeat interval, discovered topic prefix.
 - `[zwave]` — serial port, network key(s), enable flag.
-- `[zigbee]` — serial port, adapter type, db path, enable flag.
+- `[zigbee]` — serial port, db path, enable flag (adapter path is fixed to Ember).
 - `[node:<label>]` — one per known device.
 
 See [CONFIG_INI.md](CONFIG_INI.md) for full key list.

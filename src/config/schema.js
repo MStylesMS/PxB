@@ -36,7 +36,6 @@ const SCHEMA = {
     zigbee: {
         enabled: { required: false, type: 'bool', default: true },
         port: { required: true, type: 'path' },
-        adapter: { required: false, type: 'string', default: 'ember' },
         baud_rate: { required: false, type: 'int', default: 115200 },
         db_path: { required: false, type: 'path' },
         pan_id: { required: false, type: 'string' },

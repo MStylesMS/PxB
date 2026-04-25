@@ -71,6 +71,56 @@ label = Spell Box
   });
 });
 
+describe('ini-loader: zigbee adapter enforcement', () => {
+  test('accepts ember adapter and normalizes config.zigbee.adapter', () => {
+    const f = writeTempIni(`
+[mqtt]
+broker = localhost
+client_id = test
+base_topic = paradox/test
+
+[zigbee]
+port = /dev/ttyUSB1
+adapter = ember
+`);
+
+    const cfg = loadConfig(f);
+    expect(cfg.zigbee).toBeDefined();
+    expect(cfg.zigbee.adapter).toBe('ember');
+  });
+
+  test('defaults adapter to ember when omitted', () => {
+    const f = writeTempIni(`
+[mqtt]
+broker = localhost
+client_id = test
+base_topic = paradox/test
+
+[zigbee]
+port = /dev/ttyUSB1
+`);
+
+    const cfg = loadConfig(f);
+    expect(cfg.zigbee).toBeDefined();
+    expect(cfg.zigbee.adapter).toBe('ember');
+  });
+
+  test('rejects legacy non-ember adapter values', () => {
+    const f = writeTempIni(`
+[mqtt]
+broker = localhost
+client_id = test
+base_topic = paradox/test
+
+[zigbee]
+port = /dev/ttyUSB1
+adapter = zstack
+`);
+
+    expect(() => loadConfig(f)).toThrow('adapter must be "ember"');
+  });
+});
+
 describe('ini-loader: validation errors', () => {
   test('missing [mqtt] section', () => {
     const f = writeTempIni(`

@@ -119,6 +119,10 @@ function loadConfig(configPath) {
     if (raw.zigbee) {
         try {
             config.zigbee = applySchema(SCHEMA.zigbee, raw.zigbee, 'zigbee');
+            if (raw.zigbee.adapter !== undefined && String(raw.zigbee.adapter).trim() !== 'ember') {
+                errors.push('[zigbee] adapter must be "ember" (Sonoff EFR32MG21 path). Remove legacy adapter values.');
+            }
+            config.zigbee.adapter = 'ember';
             if (!config.zigbee.db_path) {
                 config.zigbee.db_path = path.join(path.dirname(absPath), 'zigbee.db');
             }

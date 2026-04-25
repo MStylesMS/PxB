@@ -59,13 +59,15 @@ File permissions should be `0600` when keys are present.
 |-----|------|:--------:|---------|-------------|
 | `enabled` | bool | no | `true` | |
 | `port` | path | yes | — | Stable serial path |
-| `adapter` | string | no | `ember` | `ember`, `zstack`, `deconz`, `ezsp` |
+| `adapter` | string | no | `ember` | Optional legacy key; when present it must be `ember` |
 | `db_path` | path | no | `zigbee.db` next to config | Coordinator state DB |
 | `pan_id` | hex | no | auto | |
 | `extended_pan_id` | hex | no | auto | |
 | `channel` | int | no | `11` | 802.15.4 channel (11–26) |
 | `network_key` | hex | no | auto | |
 | `include_timeout_s` | int | no | `60` | Default `permitJoin` window |
+
+PZB's Zigbee runtime is pinned to the Ember adapter for Sonoff EFR32MG21 coordinators (for example Dongle-LMG21). Legacy adapter modes are not supported.
 
 File permissions should be `0600` when `network_key` is set.
 
