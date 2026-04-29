@@ -5,7 +5,7 @@ PZB is a **simple, focused Z-Wave / Zigbee / Thread to MQTT bridge** for the Par
 ## What It Does
 
 - Connects to Z-Wave and Zigbee USB radios; Zigbee is targeted at Sonoff EFR32MG21 coordinators (Dongle-LMG21 class) on the Ember adapter path.
-- Publishes a **retained** heartbeat/status for the bridge process itself on a fixed interval (default 10s).
+- Publishes a **retained** heartbeat/lifecycle state for the bridge process itself on a fixed interval (default 10s).
 - Publishes **retained on-change** node events and state for contact sensors, relays, etc.
 - Accepts commands over MQTT (pairing, relay control, diagnostics) and an equivalent CLI.
 - On discovery, emits an INI fragment ready to drop into the downstream consumer (PFx) with sensible defaults and clearly marked placeholders.
@@ -40,4 +40,4 @@ PZB is one product in a set that composes a full escape-room stack:
 - **Pio** — GPIO-to-MQTT bridge
 - **PZB** — Z-Wave / Zigbee / Thread bridge (this project)
 
-All components share the same MQTT topic convention: `{baseTopic}/{commands|state|status|warnings}`.
+All components share the same MQTT topic convention: `{baseTopic}/{commands|events|state|warnings}`.

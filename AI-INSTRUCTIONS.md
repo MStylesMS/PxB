@@ -14,7 +14,7 @@ PZB is a **Node.js MQTT bridge for Z-Wave, Zigbee, and (future) Thread radios**.
 
 ## Architecture Summary
 
-PZB runs as a single process that manages one or more radios on a single host. Each configured node gets a per-node base topic (operator-defined in INI) and publishes retained `events` and `state` messages. The bridge process itself publishes a retained `status` heartbeat on a fixed interval (default 10s) so Web UIs can monitor bridge health. A `commands` topic accepts pairing control, relay output, and diagnostic commands; the same operations are available via a CLI (`pzb`).
+PZB runs as a single process that manages one or more radios on a single host. Each configured node gets a per-node base topic (operator-defined in INI) and publishes retained `events` and `state` messages. The bridge process publishes retained lifecycle heartbeats on `state` (default 10s) so Web UIs can monitor bridge health. A `commands` topic accepts pairing control, relay output, and diagnostic commands; the same operations are available via a CLI (`pzb`).
 
 ## Paradox Family Context
 
@@ -29,10 +29,10 @@ PZB is one of seven Paradox products. It is designed to **replace direct radio h
 
 ## Critical Constraints
 
-- **MQTT topic structure is sacred**: `{baseTopic}/{commands|state|status|warnings}`
+- **MQTT topic structure is sacred**: `{baseTopic}/{commands|events|state|warnings}`
 - **Per-node base topic is operator-defined** in INI — PZB does not force a fixed `<base>/zwave/<nodeid>/…` tree
 - **Retention rules**:
-  - Bridge status: retained, periodic (default 10s)
+  - Bridge state/lifecycle heartbeat: retained, periodic (default 10s)
   - Node events: retained, on-change only
   - Node state: retained, on-change only
 - **Event payload must match the PFx InputZone contract**: `{input, event, source: "zwave-node-<n>"|"zigbee-<ieee>", ts, raw}`

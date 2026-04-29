@@ -2,14 +2,14 @@
 
 **Status:** Draft v0.1.
 
-All PZB topics sit under a configurable `base_topic` from `[mqtt]` in the INI. Topic naming follows the Paradox convention `{baseTopic}/{commands|state|status|warnings}` both at the bridge level and at the per-node level. Payloads are JSON unless noted.
+All PZB topics sit under a configurable `base_topic` from `[mqtt]` in the INI. Topic naming follows the Paradox convention `{baseTopic}/{commands|events|state|warnings}` both at the bridge level and at the per-node level. Payloads are JSON unless noted.
 
 ## 1. Topic Tree
 
 ```
 {base_topic}/
   pzb/
-    status                retained, periodic (bridge heartbeat)
+    state                 retained, periodic (bridge heartbeat/lifecycle)
     commands              not retained (bridge control)
     warnings              not retained (bridge-level warnings)
     discovered/
