@@ -1,59 +1,145 @@
 /**
- * src/inputs/aggregator.js — Input aggregator for PxB (R4-RelaysInputs — Agent A6)
+ * src/inputs/aggregator.js — Input aggregator for PxB
  *
- * Skeleton implementation for the inputs domain.
- * Aggregates sensor inputs (contact, motion, etc.) from radio nodes.
+ * Subscribes to individual node event topics (contact, motion, etc.) and
+ * aggregates their state. Consumers (PxO, operator UIs) subscribe to this
+ * zone's topic for a single authoritative view of all inputs.
  *
- * This file is a template for agent A6 to implement.
- * See HueAdapter (src/lights/hue.js) for a complete reference implementation.
+ * MQTT flow:
+ *   {node.base_topic}/events  →  InputsAdapter  →  {config.topic}/state (retained)
+ *                                                   {config.topic}/events (non-retained)
  */
 
 'use strict';
 
 const AdapterBase = require('../adapter-base');
 
+/**
+ * InputsAdapter — Aggregates input state from radio nodes.
+ *
+ * Config keys expected:
+ *   - topic: MQTT topic for this zone
+ *   - filter_duplicates_ms: Suppress repeated identical events within this window (optional, default 100)
+ */
 class InputsAdapter extends AdapterBase {
-    constructor({ config, mqttClient, nodeRegistry, logger }) {
-        super({
-            name: 'InputsAdapter',
-            config,
-            mqttClient,
-            logger,
-        });
+    constructor({ config, mqttClient, logger }) {
+        super({ name: 'InputsAdapter', config, mqttClient, logger });
 
-        this.nodeRegistry = nodeRegistry;
-        // Config keys: topic, filter_duplicates_ms (optional)
-        this.logger.warn('InputsAdapter: Not yet implemented (R4-RelaysInputs agent A6)');
+        this.filterMs = config.filter_duplicates_ms || 100;
+        this._inputs = new Map();       // nodeLabel → { state, value, timestamp }
+        this._lastEvents = new Map();   // "label:event" → timestamp (for duplicate filtering)
+        this._subscriptions = [];       // Topics subscribed to node events
     }
 
-    async init() {
+    /**
+     * Subscribe to node event topics from a provided list of node configs.
+     * Call this after MQTT is connected and before processing events.
+     *
+     * @param {Array<{label: string, base_topic: string, type: string}>} nodes
+     */
+    async init(nodes = []) {
         this._assertNotDisposed();
-        // Agent A6: TODO
-        // 1. Subscribe to node input events from nodeRegistry
-        // 2. Subscribe to {topic}/commands (if needed for input zone config)
-        // 3. Publish aggregated input state
-        // 4. Apply duplicate filtering if configured
-        throw new Error('InputsAdapter.init() not yet implemented');
+        this.logger.info(`InputsAdapter: Initializing (${nodes.length} nodes)`);
+
+        for (const node of nodes) {
+            const eventTopic = `${node.base_topic}/events`;
+            this.mqttClient.subscribe(eventTopic, (msg) => {
+                this._handleNodeEvent(node.label, msg);
+            });
+            this._subscriptions.push(eventTopic);
+            this._inputs.set(node.label, { type: node.type, state: 'unknown', value: null, timestamp: null });
+        }
+
+        this._publishState();
+        this.logger.info('InputsAdapter: Initialized');
     }
 
     async executeCommand(payload) {
         this._assertNotDisposed();
-        // Agent A6: TODO
-        // Inputs are typically read-only; handle config/query commands if needed
-        throw new Error('InputsAdapter.executeCommand() not yet implemented');
+        if (!payload || typeof payload !== 'object') {
+            this.publishWarning('INPUTS_CMD_INVALID', 'Command payload must be a JSON object');
+            return;
+        }
+
+        const action = payload.action || payload.command;
+        if (action === 'getState') {
+            this._publishState();
+        } else {
+            this.publishWarning('INPUTS_CMD_UNKNOWN', `Inputs zone is read-only; unknown action: ${action}`);
+        }
     }
 
-    handleStateUpdate(state) {
-        // Agent A6: TODO
-        // Called when a node's input state changes (contact opened/closed, motion detected, etc.)
-        // Publish aggregated state to {topic}/state
+    /**
+     * Called by external event handlers when a node's state changes.
+     *
+     * @param {string} nodeLabel
+     * @param {object} stateChange - { state, value, ... }
+     */
+    handleStateUpdate(nodeLabel, stateChange) {
+        const entry = this._inputs.get(nodeLabel);
+        if (!entry) return;
+
+        entry.state = stateChange.state || entry.state;
+        entry.value = stateChange.value !== undefined ? stateChange.value : entry.value;
+        entry.timestamp = new Date().toISOString();
+
+        this._publishState();
     }
 
     async dispose() {
         this._assertNotDisposed();
-        // Agent A6: TODO
-        // Unsubscribe from node events, cleanup
+
+        for (const topic of this._subscriptions) {
+            this.mqttClient.unsubscribe(topic).catch((err) => {
+                this.logger.warn(`InputsAdapter: Unsubscribe error (${topic}): ${err.message}`);
+            });
+        }
+        this._subscriptions = [];
+
         this._markDisposed();
+        this.logger.info('InputsAdapter: Disposed');
+    }
+
+    // ---- Private Methods ----
+
+    /**
+     * Handle raw MQTT event from a node topic.
+     */
+    _handleNodeEvent(nodeLabel, msg) {
+        let event;
+        try { event = JSON.parse(msg); } catch { return; }
+        if (!event || typeof event !== 'object') return;
+
+        // Duplicate suppression: skip events with same value within filter window
+        const key = `${nodeLabel}:${event.event || ''}:${JSON.stringify(event.value)}`;
+        const now = Date.now();
+        const last = this._lastEvents.get(key);
+        if (last && (now - last) < this.filterMs) return;
+        this._lastEvents.set(key, now);
+
+        this.handleStateUpdate(nodeLabel, {
+            state: event.state || event.event,
+            value: event.value,
+        });
+
+        // Forward event to zone events topic
+        this.publishEvent('input-changed', {
+            node: nodeLabel,
+            state: event.state || event.event,
+            value: event.value,
+        });
+    }
+
+    _publishState() {
+        const inputs = {};
+        for (const [label, entry] of this._inputs) {
+            inputs[label] = { type: entry.type, state: entry.state, value: entry.value, timestamp: entry.timestamp };
+        }
+        this.publishState({
+            type: 'inputs',
+            timestamp: new Date().toISOString(),
+            inputs,
+        });
     }
 }
 

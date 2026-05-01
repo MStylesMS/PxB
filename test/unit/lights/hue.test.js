@@ -193,7 +193,8 @@ describe('HueAdapter', () => {
 
             expect(mockMqtt.publish).toHaveBeenCalledWith(
                 expect.stringContaining('/warnings'),
-                expect.any(String)
+                expect.any(String),
+                expect.any(Object)
             );
         });
 
@@ -202,7 +203,8 @@ describe('HueAdapter', () => {
 
             expect(mockMqtt.publish).toHaveBeenCalledWith(
                 expect.stringContaining('/warnings'),
-                expect.any(String)
+                expect.any(String),
+                expect.any(Object)
             );
         });
     });
@@ -277,7 +279,8 @@ describe('HueAdapter', () => {
 
             expect(mockMqtt.publish).toHaveBeenCalledWith(
                 expect.stringContaining('/warnings'),
-                expect.any(String)
+                expect.any(String),
+                expect.any(Object)
             );
         });
 
@@ -306,7 +309,8 @@ describe('HueAdapter', () => {
 
             expect(mockMqtt.publish).toHaveBeenCalledWith(
                 expect.stringContaining('/events'),
-                expect.stringContaining('light-updated')
+                expect.stringContaining('light-updated'),
+                expect.any(Object)
             );
         });
     });
