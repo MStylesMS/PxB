@@ -293,6 +293,31 @@ async function main() {
         zigbeeEvents,
     });
 
+    // --- Domain adapters (lights, switches, inputs, outputs) ---
+    // Scaffold: initialize empty adapter maps; R3-R4 agents will populate these.
+    const domainAdapters = {
+        lights: new Map(),      // Backend → adapter instances (e.g., 'hue' → [HueAdapter, ...])
+        switches: new Map(),    // Backend → adapter instances (e.g., 'shelly' → [ShellyAdapter, ...])
+        inputs: new Map(),      // Input aggregator zone → InputsAdapter
+        outputs: new Map(),     // Output aggregator zone → OutputsAdapter
+    };
+
+    // Placeholder: load configured domain adapters once backends are implemented.
+    // For now, log which zones are configured but not yet instantiated.
+    try {
+        const lightsZones = Object.keys(config).filter((k) => k.startsWith('lights:'));
+        const switchesZones = Object.keys(config).filter((k) => k.startsWith('switches:'));
+        const inputsZones = Object.keys(config).filter((k) => k.startsWith('inputs:'));
+        const outputsZones = Object.keys(config).filter((k) => k.startsWith('outputs:'));
+
+        if (lightsZones.length > 0) logger.info(`Lights zones configured: ${lightsZones.join(', ')} (adapters not yet implemented)`);
+        if (switchesZones.length > 0) logger.info(`Switches zones configured: ${switchesZones.join(', ')} (adapters not yet implemented)`);
+        if (inputsZones.length > 0) logger.info(`Inputs zones configured: ${inputsZones.join(', ')} (aggregator not yet implemented)`);
+        if (outputsZones.length > 0) logger.info(`Outputs zones configured: ${outputsZones.join(', ')} (aggregator not yet implemented)`);
+    } catch (err) {
+        logger.warn(`Failed to enumerate domain adapters: ${err.message}`);
+    }
+
     // --- Z-Wave startup (non-fatal: failures schedule reconnect) ---
     if (zwaveDriver) {
         try {
@@ -314,6 +339,29 @@ async function main() {
     // --- Graceful shutdown ---
     async function shutdown(signal) {
         logger.info(`Received ${signal} — shutting down`);
+        
+        // Dispose domain adapters
+        try {
+            for (const [, adapters] of domainAdapters.lights) {
+                for (const adapter of adapters) {
+                    try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
+                }
+            }
+            for (const [, adapters] of domainAdapters.switches) {
+                for (const adapter of adapters) {
+                    try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
+                }
+            }
+            for (const [, adapter] of domainAdapters.inputs) {
+                try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
+            }
+            for (const [, adapter] of domainAdapters.outputs) {
+                try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
+            }
+        } catch (err) {
+            logger.warn(`Error disposing adapters: ${err.message}`);
+        }
+
         if (zwaveDriver) {
             try { await zwaveDriver.stop(); } catch (err) { logger.warn(`Z-Wave stop error: ${err.message}`); }
         }

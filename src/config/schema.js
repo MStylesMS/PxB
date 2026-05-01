@@ -55,10 +55,46 @@ const SCHEMA = {
         input_channel: { required: false, type: 'string', default: '0' },
         low_battery_threshold: { required: false, type: 'int', default: 20 },
     },
+    'lights:*': {
+        // Lights zones follow pattern [lights:zone_name]
+        // Backend-specific configuration (hue, lifx, wiz, etc.)
+        backend: { required: true, type: 'string' },
+        topic: { required: true, type: 'string' },
+        device_id: { required: false, type: 'string' },
+        api_key: { required: false, type: 'string' },
+        host: { required: false, type: 'string' },
+        port: { required: false, type: 'int' },
+        brightness: { required: false, type: 'int', default: 100 },
+        timeout_s: { required: false, type: 'int', default: 10 },
+    },
+    'switches:*': {
+        // Switches zones follow pattern [switches:zone_name]
+        // For smart switches and relays (Shelly, Z-Wave, etc.)
+        backend: { required: true, type: 'string' },
+        topic: { required: true, type: 'string' },
+        device_id: { required: false, type: 'string' },
+        host: { required: false, type: 'string' },
+        port: { required: false, type: 'int' },
+        timeout_s: { required: false, type: 'int', default: 10 },
+    },
+    'inputs:*': {
+        // Inputs zones follow pattern [inputs:zone_name]
+        // Aggregates sensor inputs (contact, motion, etc.)
+        topic: { required: true, type: 'string' },
+        filter_duplicates_ms: { required: false, type: 'int', default: 100 },
+    },
+    'outputs:*': {
+        // Outputs zones follow pattern [outputs:zone_name]
+        // Generic output aggregator for relays, GPIO, etc.
+        topic: { required: true, type: 'string' },
+    },
 };
 
 const VALID_NODE_LABEL = /^[a-z0-9][a-z0-9-]*$/;
 const VALID_RADIOS = new Set(['zwave', 'zigbee']);
 const VALID_TYPES = new Set(['contact', 'relay', 'switch', 'motion', 'custom']);
+const VALID_LIGHT_BACKENDS = new Set(['hue', 'lifx', 'wiz']);
+const VALID_SWITCH_BACKENDS = new Set(['shelly']);
+const VALID_ZONE_TYPES = new Set(['lights', 'switches', 'inputs', 'outputs']);
 
-module.exports = { SCHEMA, VALID_NODE_LABEL, VALID_RADIOS, VALID_TYPES };
+module.exports = { SCHEMA, VALID_NODE_LABEL, VALID_RADIOS, VALID_TYPES, VALID_LIGHT_BACKENDS, VALID_SWITCH_BACKENDS, VALID_ZONE_TYPES };
