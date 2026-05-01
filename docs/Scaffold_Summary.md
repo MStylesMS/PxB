@@ -1,6 +1,6 @@
-# PZB Scaffold Summary
+# PxB Scaffold Summary
 
-This document describes the initial repo layout created during the PZB scaffold. No runtime code exists yet — only structure, docs, and metadata.
+This document describes the initial repo layout created during the PxB scaffold. No runtime code exists yet — only structure, docs, and metadata.
 
 ## Files
 

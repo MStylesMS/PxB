@@ -1,9 +1,9 @@
-# PZB Quick Start
+# PxB Quick Start
 
 ## 1. Install
 
 ```bash
-cd /opt/paradox/apps/PZB
+cd /opt/paradox/apps/PxB
 npm install
 ```
 
@@ -84,7 +84,7 @@ node src/cli/index.js list-nodes --config /opt/paradox/config/pzb.ini
 node src/cli/index.js help
 ```
 
-If PZB is installed globally via `npm link` or the `pzb` binary is in PATH:
+If PxB is installed globally via `npm link` or the `pzb` binary is in PATH:
 
 ```bash
 pzb status     --config /opt/paradox/config/pzb.ini
@@ -98,7 +98,7 @@ mosquitto_pub -t paradox/houdini/pzb/commands \
   -m '{"command":"getNetworkStatus"}'
 ```
 
-PZB will immediately re-publish the current `pzb/state` payload.
+PxB will immediately re-publish the current `pzb/state` payload.
 
 ## 7. Verify Contact Sensor Events
 
@@ -109,7 +109,7 @@ mosquitto_sub -v -t 'paradox/houdini/zwave/spell-box/#'
 ```
 
 Expected retained messages (subscribe once, you'll see the latest of each):
-- `.../schema` — one-shot descriptor published at PZB startup; tells consumers the node's type, topics, and payload shape.
+- `.../schema` — one-shot descriptor published at PxB startup; tells consumers the node's type, topics, and payload shape.
 - `.../events` — short event payload per state change, e.g. `{"event":"open"}` / `{"event":"close"}`.
 - `.../state`  — flat telemetry snapshot published only when something changes:
   ```json
@@ -127,7 +127,7 @@ See [MQTT_API.md §8](MQTT_API.md) for the full state / schema reference.
 
 ## 8. Include / Exclude a Node
 
-**Default inclusion strategy is Insecure (`2`).** PZB does not yet wire the S2 user
+**Default inclusion strategy is Insecure (`2`).** PxB does not yet wire the S2 user
 callbacks (`grantSecurityClasses`, `validateDSKAndEnterPIN`, `abort`), so a default-strategy
 S2 bootstrap will abort and leave the node half-included and unreachable. Unless you
 have a specific reason to use S0 / S2, leave `strategy` unset.
@@ -157,7 +157,7 @@ Optional overrides (advanced; only use if you have a reason):
 {"command":"startInclusion","radio":"zwave","timeout_s":120}
 ```
 
-On success PZB publishes a `paradox/<base>/pzb/discovered/zwave/<node_id>` message
+On success PxB publishes a `paradox/<base>/pzb/discovered/zwave/<node_id>` message
 with a ready-to-paste INI fragment.
 
 ## 9. Install as a Systemd Service
@@ -165,7 +165,7 @@ with a ready-to-paste INI fragment.
 Copy the bundled template:
 
 ```bash
-sudo cp /opt/paradox/apps/PZB/config/systemd/pzb.service /etc/systemd/system/pzb.service
+sudo cp /opt/paradox/apps/PxB/config/systemd/pzb.service /etc/systemd/system/pzb.service
 # Edit ExecStart and --config path if your config is in a different location
 sudo nano /etc/systemd/system/pzb.service
 ```

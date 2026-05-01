@@ -1,8 +1,8 @@
-# PZB INI Configuration Reference
+# PxB INI Configuration Reference
 
 **Status:** Draft v0.1.
 
-PZB is configured by a single INI file. Pass the path via `--config` or default location `/etc/pzb/pzb.ini`.
+PxB is configured by a single INI file. Pass the path via `--config` or default location `/etc/pzb/pzb.ini`.
 
 ## Section Overview
 
@@ -67,7 +67,7 @@ File permissions should be `0600` when keys are present.
 | `network_key` | hex | no | auto | |
 | `include_timeout_s` | int | no | `60` | Default `permitJoin` window |
 
-PZB's Zigbee runtime is pinned to the Ember adapter for Sonoff EFR32MG21 coordinators (for example Dongle-LMG21). Legacy adapter modes are not supported.
+PxB's Zigbee runtime is pinned to the Ember adapter for Sonoff EFR32MG21 coordinators (for example Dongle-LMG21). Legacy adapter modes are not supported.
 
 File permissions should be `0600` when `network_key` is set.
 
@@ -114,10 +114,10 @@ description = Magnetic contact on the spell-box lid
 
 ## Generated Fragment (Discovery)
 
-When a new node is included, PZB writes a fragment like this into `discovered.ini`:
+When a new node is included, PxB writes a fragment like this into `discovered.ini`:
 
 ```ini
-# Discovered 2026-04-22T14:40:00Z by PZB v0.1.0
+# Discovered 2026-04-22T14:40:00Z by PxB v0.1.0
 # Review all TODO markers, then move this section into the main config.
 [node:discovered-003]
 radio = zwave

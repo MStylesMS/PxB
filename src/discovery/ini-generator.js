@@ -4,7 +4,7 @@
  * Build an INI fragment describing a freshly-included radio device.
  *
  * Operators edit the fragment to add their own label, base_topic, and
- * friendly description before merging it into the main pzb.ini.
+ * friendly description before merging it into the main pxb.ini.
  *
  * Supports both Z-Wave nodes (from `zwave-js`) and Zigbee devices (from
  * `zigbee-herdsman`).
@@ -26,7 +26,7 @@ function guessType(node) {
 }
 
 /**
- * Guess the PZB `type` for a Zigbee device by inspecting exposed clusters.
+ * Guess the PxB `type` for a Zigbee device by inspecting exposed clusters.
  * Preference order: relay (genOnOff input cluster) → contact (ssIasZone) → custom.
  */
 function guessZigbeeType(device) {
@@ -44,7 +44,7 @@ function guessZigbeeType(device) {
 }
 
 function toClusterName(raw) {
-    // herdsman endpoint lists clusters as integer IDs; map the handful PZB cares about.
+    // herdsman endpoint lists clusters as integer IDs; map the handful PxB cares about.
     if (typeof raw === 'string') return raw;
     const CL = {
         0: 'genBasic',

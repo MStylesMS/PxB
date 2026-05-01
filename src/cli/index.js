@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * PZB CLI — read-only status/inspection commands.
+ * PxB CLI — read-only status/inspection commands.
  *
  * Usage:
  *   pzb status     --config <path>  [--timeout <ms>]
@@ -96,7 +96,7 @@ async function cmdStatus(args) {
         if (!received) {
             process.stderr.write(
                 `Timeout: no state message received on "${topics.state}" within ${timeoutMs}ms\n` +
-                'Is PZB running and connected to the same broker?\n'
+                'Is PxB running and connected to the same broker?\n'
             );
             mqtt.disconnect().then(() => process.exit(1));
         }

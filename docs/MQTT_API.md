@@ -1,8 +1,8 @@
-# PZB MQTT API
+# PxB MQTT API
 
 **Status:** Draft v0.1.
 
-All PZB topics sit under a configurable `base_topic` from `[mqtt]` in the INI. Topic naming follows the Paradox convention `{baseTopic}/{commands|events|state|warnings}` both at the bridge level and at the per-node level. Payloads are JSON unless noted.
+All PxB topics sit under a configurable `base_topic` from `[mqtt]` in the INI. Topic naming follows the Paradox convention `{baseTopic}/{commands|events|state|warnings}` both at the bridge level and at the per-node level. Payloads are JSON unless noted.
 
 ## 1. Topic Tree
 
@@ -23,7 +23,7 @@ All PZB topics sit under a configurable `base_topic` from `[mqtt]` in the INI. T
     warnings              not retained
 ```
 
-The per-node segment is **fully operator-defined** via INI. Example: `paradox/houdini/zwave/spell-box` — PZB does not force a fixed tree.
+The per-node segment is **fully operator-defined** via INI. Example: `paradox/houdini/zwave/spell-box` — PxB does not force a fixed tree.
 
 ## 2. Retention Rules
 
@@ -68,7 +68,7 @@ Not retained. Payloads:
 
 | Command | Payload | Description |
 |---------|---------|-------------|
-| `startInclusion` | `{ "command":"startInclusion", "radio":"zwave", "label":"<optional>", "strategy":<int>, "timeout_s":<int> }` | Enter inclusion mode on given radio. `strategy` is a zwave-js `InclusionStrategy` (`0`=Default/prefers S2, `2`=Insecure, `3`=S0, `4`=S2). **Defaults to `2` (Insecure)** because S2 bootstrap requires user callbacks that PZB does not yet provide; omit `strategy` for the safe default. |
+| `startInclusion` | `{ "command":"startInclusion", "radio":"zwave", "label":"<optional>", "strategy":<int>, "timeout_s":<int> }` | Enter inclusion mode on given radio. `strategy` is a zwave-js `InclusionStrategy` (`0`=Default/prefers S2, `2`=Insecure, `3`=S0, `4`=S2). **Defaults to `2` (Insecure)** because S2 bootstrap requires user callbacks that PxB does not yet provide; omit `strategy` for the safe default. |
 | `stopInclusion` | `{ "command":"stopInclusion", "radio":"zwave" }` | Exit inclusion mode. |
 | `startExclusion` | `{ "command":"startExclusion", "radio":"zwave" }` | Enter exclusion mode. |
 | `stopExclusion` | `{ "command":"stopExclusion", "radio":"zwave" }` | Exit exclusion mode. |
@@ -153,11 +153,11 @@ Field semantics:
 - `tamper` — `{ active: bool, ts: iso8601 }` or `null` until supported by the device.
 - `source` — `"zwave-node-<N>"` identifying the origin radio node.
 
-Before any telemetry has been received for a node, PZB does not publish `state` at all (consumers should treat missing retained state as "unknown"). On driver disconnect PZB publishes `reachable: { value: false, ... }`.
+Before any telemetry has been received for a node, PxB does not publish `state` at all (consumers should treat missing retained state as "unknown"). On driver disconnect PxB publishes `reachable: { value: false, ... }`.
 
 ## 8a. Per-Node Schema (`{node.base_topic}/schema`)
 
-Retained. Published once per configured node on PZB startup (and again on Z-Wave driver reconnect). Describes the node's topic layout and payload shapes so consumers can bind without hard-coding.
+Retained. Published once per configured node on PxB startup (and again on Z-Wave driver reconnect). Describes the node's topic layout and payload shapes so consumers can bind without hard-coding.
 
 ```json
 {
@@ -208,8 +208,8 @@ Standard codes:
 
 ## 11. Relationship with PFx
 
-PFx no longer consumes radio events; Z-Wave / Zigbee I/O is owned entirely by PZB. Consumers such as PxO, PxT, and dashboards subscribe directly to the per-node topics described above. Future PFx integration is limited to outbound adapter work (translating generic light/relay commands into PZB `{node.base_topic}/commands` payloads). Do not add `[input:*]` sections in PFx INI for zwave/zigbee sensors.
+PFx no longer consumes radio events; Z-Wave / Zigbee I/O is owned entirely by PxB. Consumers such as PxO, PxT, and dashboards subscribe directly to the per-node topics described above. Future PFx integration is limited to outbound adapter work (translating generic light/relay commands into PxB `{node.base_topic}/commands` payloads). Do not add `[input:*]` sections in PFx INI for zwave/zigbee sensors.
 
 ## 12. Versioning
 
-`pzb/state.version` reflects PZB's semantic version. API-breaking changes require a bump and a migration note in this document.
+`pzb/state.version` reflects PxB's semantic version. API-breaking changes require a bump and a migration note in this document.

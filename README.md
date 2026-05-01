@@ -1,6 +1,6 @@
-# PZB — Paradox Z Bridge
+# PxB — Paradox Bridge
 
-PZB is a **simple, focused Z-Wave / Zigbee / Thread to MQTT bridge** for the Paradox escape-room platform. It owns the radio(s) on a Linux host, publishes device events and state over MQTT in the Paradox topic contract, and accepts pairing and output commands via MQTT or CLI.
+PxB is a **simple, focused Z-Wave / Zigbee / Thread to MQTT bridge** for the Paradox escape-room platform. It owns the radio(s) on a Linux host, publishes device events and state over MQTT in the Paradox topic contract, and accepts pairing and output commands via MQTT or CLI.
 
 ## What It Does
 
@@ -10,9 +10,9 @@ PZB is a **simple, focused Z-Wave / Zigbee / Thread to MQTT bridge** for the Par
 - Accepts commands over MQTT (pairing, relay control, diagnostics) and an equivalent CLI.
 - On discovery, emits an INI fragment ready to drop into the downstream consumer (PFx) with sensible defaults and clearly marked placeholders.
 
-## Why PZB Exists
+## Why PxB Exists
 
-PFx was evolving toward direct Z-Wave and Zigbee ownership. That coupled the radio stack lifecycle to the media controller lifecycle, made fault isolation hard, and required PFx to grow into device management territory. PZB takes that responsibility, lets PFx stay focused on media/effects, and gives every other Paradox component (PxO, Web UIs, PxT) a single stable MQTT contract for radio devices.
+PFx was evolving toward direct Z-Wave and Zigbee ownership. That coupled the radio stack lifecycle to the media controller lifecycle, made fault isolation hard, and required PFx to grow into device management territory. PxB takes that responsibility, lets PFx stay focused on media/effects, and gives every other Paradox component (PxO, Web UIs, PxT) a single stable MQTT contract for radio devices.
 
 ## Project Status
 
@@ -31,13 +31,13 @@ PFx was evolving toward direct Z-Wave and Zigbee ownership. That coupled the rad
 
 ## Paradox Family
 
-PZB is one product in a set that composes a full escape-room stack:
+PxB is one product in a set that composes a full escape-room stack:
 
 - **PFx** — media/audio/lights/relays controller
 - **PxO** — game orchestration engine
 - **PxC** — configurable clock application framework
 - **PxT** — player terminal kiosk
 - **Pio** — GPIO-to-MQTT bridge
-- **PZB** — Z-Wave / Zigbee / Thread bridge (this project)
+- **PxB** — Z-Wave / Zigbee / Thread bridge (this project)
 
 All components share the same MQTT topic convention: `{baseTopic}/{commands|events|state|warnings}`.

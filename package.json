@@ -1,10 +1,10 @@
 {
-    "name": "pzb",
+    "name": "pxb",
     "version": "0.1.0",
-    "description": "Paradox Z Bridge — Z-Wave / Zigbee / Thread to MQTT bridge",
+    "description": "Paradox Bridge — Z-Wave / Zigbee / Thread to MQTT bridge",
     "main": "src/index.js",
     "bin": {
-        "pzb": "src/cli/index.js"
+        "pxb": "src/cli/index.js"
     },
     "scripts": {
         "start": "node src/index.js",

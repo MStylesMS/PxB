@@ -21,7 +21,7 @@ describe('Heartbeat', () => {
     const hb = new Heartbeat(mock, 'paradox/test', 10, () => ({ state: 'ok', pid: 1 }));
     hb.start();
     expect(mock.published).toHaveLength(1);
-    expect(mock.published[0].topic).toBe('paradox/test/pzb/state');
+    expect(mock.published[0].topic).toBe('paradox/test/pxb/state');
     expect(mock.published[0].opts.retain).toBe(true);
     expect(mock.published[0].payload.state).toBe('ok');
     hb.stop();

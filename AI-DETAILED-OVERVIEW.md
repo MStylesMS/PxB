@@ -1,4 +1,4 @@
-# PZB — AI Detailed Overview
+# PxB — AI Detailed Overview
 
 This document expands on [AI-INSTRUCTIONS.md](AI-INSTRUCTIONS.md). Start there for context.
 
@@ -8,7 +8,7 @@ Own the radio(s) on a Paradox Linux host and expose **events**, **state**, and *
 
 ## Non-Goals
 
-- No web UI (Z-Wave JS UI already exists for power users; PZB is deliberately smaller).
+- No web UI (Z-Wave JS UI already exists for power users; PxB is deliberately smaller).
 - No deep automation/rules engine (PxO and PFx `input_map` cover this).
 - No multi-radio-per-process beyond one Z-Wave endpoint + one Zigbee endpoint + (future) one Thread endpoint on the same host.
 - No silent auto-publishing of unknown devices under arbitrary topics.
@@ -34,7 +34,7 @@ src/
     bridge.js            # orchestrator: owns radios + node registry
     heartbeat.js         # bridge-level status publisher
     node-registry.js     # configured nodes + runtime state
-    normalizer.js        # radio payloads → PZB normalized event/state
+    normalizer.js        # radio payloads → PxB normalized event/state
   radios/
     zwave/
       driver.js          # zwave-js lifecycle (startup, interview, reconnect)
@@ -63,7 +63,7 @@ test/
 
 ## Config Model
 
-One INI file per PZB process. Sections:
+One INI file per PxB process. Sections:
 
 - `[mqtt]` — broker, port, credentials, base_topic, client_id
 - `[global]` — log_level, heartbeat_interval (default 10s), discovered_base_topic (default `{base_topic}/pzb/discovered`)
@@ -109,13 +109,13 @@ Full detail in [docs/MQTT_API.md](docs/MQTT_API.md).
 ## Pairing / Discovery Flow
 
 1. Operator sends `{"command":"startInclusion"}` on `{base_topic}/pzb/commands` (or runs `pzb include --label spell-box`).
-2. PZB enters inclusion mode and publishes progress on `{base_topic}/pzb/state` (phase: `including`).
+2. PxB enters inclusion mode and publishes progress on `{base_topic}/pzb/state` (phase: `including`).
 3. Operator triggers the device to join (physical button / magnet tap).
-4. PZB completes interview, assigns a default label (`discovered-<nodeId>` if none provided) and:
+4. PxB completes interview, assigns a default label (`discovered-<nodeId>` if none provided) and:
    - publishes a discovery notice on `{base_topic}/pzb/discovered/zwave/<nodeId>`
    - writes a generated INI fragment to stdout + a discovery sidecar file
    - keeps the node in-memory for the session so basic events are observable
-5. Operator copies the INI fragment into the main config, adjusts `base_topic`/`type`, restarts PZB.
+5. Operator copies the INI fragment into the main config, adjusts `base_topic`/`type`, restarts PxB.
 
 Generated fragment example:
 
@@ -183,8 +183,8 @@ Node-level (`{base_topic:node}/commands`) for outputs:
 ## Relationship to PFx
 
 - PFx **stops** running direct Z-Wave (and later Zigbee) drivers.
-- PFx input zones already subscribe to external MQTT topics — they consume PZB events unchanged once topics match.
-- PFx light/relay backends gain a `bridge` mode: commands are published to a PZB node's `commands` topic; state is consumed from the node's `state` topic.
+- PFx input zones already subscribe to external MQTT topics — they consume PxB events unchanged once topics match.
+- PFx light/relay backends gain a `bridge` mode: commands are published to a PxB node's `commands` topic; state is consumed from the node's `state` topic.
 
 See `apps/PFx/docs/PR_ZWAVE_ZIGBEE_DIRECT.md` for the PFx-side migration.
 

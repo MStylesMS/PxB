@@ -119,7 +119,7 @@ class ZWaveInclusion extends EventEmitter {
             // InclusionStrategy: 0=Default (prefers S2), 2=Insecure, 3=S0, 4=S2.
             // We default to Insecure (2) because S2 bootstrap requires
             // `inclusionUserCallbacks` (grantSecurityClasses, validateDSKAndEnterPIN,
-            // abort) which PZB does not yet wire up — without them zwave-js aborts
+            // abort) which PxB does not yet wire up — without them zwave-js aborts
             // S2 and the node is left half-included and unreachable.
             // Caller may override via MQTT payload { "strategy": 4 } once callbacks are added.
             if (mode === 'inclusion') {

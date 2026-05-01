@@ -36,7 +36,7 @@ describe('ZWaveEvents — schema', () => {
         expect(pubs).toHaveLength(1);
         expect(pubs[0].retain).toBe(true);
         const s = pubs[0].payload;
-        expect(s.application).toBe('pzb');
+        expect(s.application).toBe('pxb');
         expect(s.label).toBe('spell-box');
         expect(s.radio).toBe('zwave');
         expect(s.type).toBe('contact');

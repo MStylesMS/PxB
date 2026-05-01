@@ -7,14 +7,14 @@ Back to spec: [Supported Devices in SPEC](../SPEC.md#19-supported-devices)
 - Vendor: Third Reality
 - Model: 3RDS17BZ
 - Protocol: Zigbee
-- PZB class: contact
-- Status: PZB support implemented (PZB phase 3); hardware validation pending
+- PxB class: contact
+- Status: PxB support implemented (PxB phase 3); hardware validation pending
 
 This profile is staged ahead of Zigbee phase work so the team can track model-specific pairing and compatibility notes in one place.
 
-## Pairing Workflow (PZB Zigbee)
+## Pairing Workflow (PxB Zigbee)
 
-1. Enable Zigbee radio support in PZB config for the target coordinator.
+1. Enable Zigbee radio support in PxB config for the target coordinator.
 2. Start Zigbee inclusion mode from bridge commands.
 3. Trigger pairing mode on the 3RDS17BZ sensor.
 4. Confirm discovery topic output and generated config fragment.

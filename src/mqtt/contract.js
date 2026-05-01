@@ -1,17 +1,17 @@
 'use strict';
 
 /**
- * Topic builder and retention policy helpers for PZB.
+ * Topic builder and retention policy helpers for PxB.
  *
  * All per-node base_topics are operator-defined in INI.
  * Bridge-level topics are derived from mqtt.base_topic.
  */
 
 /**
- * Bridge-level topics under `{baseTopic}/pzb/…`
+ * Bridge-level topics under `{baseTopic}/pxb/…`
  */
 function bridgeTopics(baseTopic) {
-    const root = `${baseTopic}/pzb`;
+    const root = `${baseTopic}/pxb`;
     return {
         state: `${root}/state`,
         commands: `${root}/commands`,
@@ -39,10 +39,10 @@ function nodeTopics(nodeBaseTopic) {
  * Returns { retain: bool, description: string }
  */
 const RETENTION = {
-    'pzb/state': { retain: true, description: 'periodic heartbeat' },
-    'pzb/commands': { retain: false, description: 'on demand' },
-    'pzb/warnings': { retain: false, description: 'on demand' },
-    'pzb/discovered': { retain: true, description: 'on discovery' },
+    'pxb/state': { retain: true, description: 'periodic heartbeat' },
+    'pxb/commands': { retain: false, description: 'on demand' },
+    'pxb/warnings': { retain: false, description: 'on demand' },
+    'pxb/discovered': { retain: true, description: 'on discovery' },
     'node/events': { retain: true, description: 'on change only' },
     'node/state': { retain: true, description: 'on telemetry change' },
     'node/schema': { retain: true, description: 'once at startup' },

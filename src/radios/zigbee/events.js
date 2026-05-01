@@ -218,7 +218,7 @@ class ZigbeeEvents {
     _publishSchema(entry) {
         const topics = nodeTopics(entry.base_topic);
         const schema = {
-            application: 'pzb',
+            application: 'pxb',
             label: entry.label,
             radio: entry.radio,
             type: entry.type,

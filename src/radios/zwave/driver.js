@@ -150,7 +150,7 @@ class ZWaveDriver extends EventEmitter {
                 enabled: !!process.env.ZWAVE_DEBUG,
                 level: process.env.ZWAVE_DEBUG || 'info',
                 logToFile: !!process.env.ZWAVE_DEBUG,
-                filename: '/opt/paradox/logs/pzb/zwave-js.log',
+                filename: '/opt/paradox/logs/pxb/zwave-js.log',
             },
             emitValueUpdateAfterSetValue: true,
         };

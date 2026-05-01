@@ -7,7 +7,7 @@ const os   = require('os');
 
 // Helper: write a temp ini file and return its path
 function writeTempIni(content) {
-  const f = path.join(os.tmpdir(), `pzb-test-${Date.now()}.ini`);
+  const f = path.join(os.tmpdir(), `pxb-test-${Date.now()}.ini`);
   fs.writeFileSync(f, content, 'utf8');
   return f;
 }

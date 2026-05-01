@@ -1,6 +1,6 @@
-# Paradox Z Bridge (PZB) — AI Instructions
+# Paradox Bridge (PxB) — AI Instructions
 
-PZB is a **Node.js MQTT bridge for Z-Wave, Zigbee, and (future) Thread radios**. It is the sole owner of radio hardware on a Paradox host and exposes a simple, stable MQTT contract for all other Paradox components.
+PxB is a **Node.js MQTT bridge for Z-Wave, Zigbee, and (future) Thread radios**. It is the sole owner of radio hardware on a Paradox host and exposes a simple, stable MQTT contract for all other Paradox components.
 
 ## Tech Stack
 
@@ -14,30 +14,30 @@ PZB is a **Node.js MQTT bridge for Z-Wave, Zigbee, and (future) Thread radios**.
 
 ## Architecture Summary
 
-PZB runs as a single process that manages one or more radios on a single host. Each configured node gets a per-node base topic (operator-defined in INI) and publishes retained `events` and `state` messages. The bridge process publishes retained lifecycle heartbeats on `state` (default 10s) so Web UIs can monitor bridge health. A `commands` topic accepts pairing control, relay output, and diagnostic commands; the same operations are available via a CLI (`pzb`).
+PxB runs as a single process that manages one or more radios on a single host. Each configured node gets a per-node base topic (operator-defined in INI) and publishes retained `events` and `state` messages. The bridge process publishes retained lifecycle heartbeats on `state` (default 10s) so Web UIs can monitor bridge health. A `commands` topic accepts pairing control, relay output, and diagnostic commands; the same operations are available via a CLI (`pzb`).
 
 ## Paradox Family Context
 
-PZB is one of seven Paradox products. It is designed to **replace direct radio handling in PFx** — PFx consumes PZB over MQTT like any other zone. Family:
+PxB is one of seven Paradox products. It is designed to **replace direct radio handling in PFx** — PFx consumes PxB over MQTT like any other zone. Family:
 
 - **PFx** — media/audio/lights/relays controller (Node.js)
 - **PxO** — game orchestration engine (Node.js, EDN)
 - **PxC** — configurable clock apps (React build system)
 - **PxT** — player terminal kiosk (Electron)
 - **Pio** — GPIO-to-MQTT bridge (C++)
-- **PZB** — this project, radio-to-MQTT bridge (Node.js)
+- **PxB** — this project, radio-to-MQTT bridge (Node.js)
 
 ## Critical Constraints
 
 - **MQTT topic structure is sacred**: `{baseTopic}/{commands|events|state|warnings}`
-- **Per-node base topic is operator-defined** in INI — PZB does not force a fixed `<base>/zwave/<nodeid>/…` tree
+- **Per-node base topic is operator-defined** in INI — PxB does not force a fixed `<base>/zwave/<nodeid>/…` tree
 - **Retention rules**:
   - Bridge state/lifecycle heartbeat: retained, periodic (default 10s)
   - Node events: retained, on-change only
   - Node state: retained, on-change only
 - **Event payload must match the PFx InputZone contract**: `{input, event, source: "zwave-node-<n>"|"zigbee-<ieee>", ts, raw}`
-- **Single-writer to radio**: PZB is the only process that opens the radio serial port. PFx direct-radio backends must be retired as PZB comes online.
-- **Discovered-but-unconfigured nodes** get a generated INI fragment with placeholders — PZB does not silently start publishing under a guessed topic without operator confirmation (except under a clearly marked `discovered/` prefix).
+- **Single-writer to radio**: PxB is the only process that opens the radio serial port. PFx direct-radio backends must be retired as PxB comes online.
+- **Discovered-but-unconfigured nodes** get a generated INI fragment with placeholders — PxB does not silently start publishing under a guessed topic without operator confirmation (except under a clearly marked `discovered/` prefix).
 
 ## Documentation-First Development
 

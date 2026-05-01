@@ -22,7 +22,7 @@ function makeSetup(overrides = {}) {
 
     // Helper: deliver a command payload to the subscribed topic
     function deliver(payload) {
-        const topic = 'paradox/test/pzb/commands';
+        const topic = 'paradox/test/pxb/commands';
         subscriptions[topic]?.(topic, payload);
     }
 
@@ -35,7 +35,7 @@ describe('BridgeCommandHandler: getNetworkStatus', () => {
         deliver({ command: 'getNetworkStatus' });
         expect(published).toHaveLength(1);
         const { topic, payload, opts } = published[0];
-        expect(topic).toBe('paradox/test/pzb/state');
+        expect(topic).toBe('paradox/test/pxb/state');
         expect(payload.state).toBe('ok');
         expect(opts.retain).toBe(true);
     });

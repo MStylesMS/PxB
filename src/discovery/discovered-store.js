@@ -88,7 +88,7 @@ class DiscoveredStore {
         if (!this._filePath) return;
         try {
             fs.mkdirSync(path.dirname(this._filePath), { recursive: true });
-            const header = `; PZB discovered-device fragments — auto-generated, safe to edit\n; Generated: ${new Date().toISOString()}\n\n`;
+            const header = `; PxB discovered-device fragments — auto-generated, safe to edit\n; Generated: ${new Date().toISOString()}\n\n`;
             const body = this.all().map((e) => e.fragment).join('\n');
             fs.writeFileSync(this._filePath, header + body, 'utf8');
         } catch (err) {

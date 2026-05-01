@@ -54,10 +54,10 @@ async function main() {
     logger.setLevel(logLevel);
     logger.configure({
         logDirectory: config.global.log_directory || null,
-        logFilePrefix: 'pzb',
+        logFilePrefix: 'pxb',
     });
 
-    logger.info(`PZB starting — config: ${path.resolve(args.config)}`);
+    logger.info(`PxB starting — config: ${path.resolve(args.config)}`);
     logger.info(`Nodes configured: ${Object.keys(config.nodes).join(', ') || '(none)'}`);
 
     const startTime = Date.now();
@@ -323,7 +323,7 @@ async function main() {
         heartbeat.flush({ state: 'stopping' });
         heartbeat.stop();
         await mqtt.disconnect();
-        logger.info('PZB stopped');
+        logger.info('PxB stopped');
         logger.close();
         process.exit(0);
     }
@@ -331,7 +331,7 @@ async function main() {
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
 
-    logger.info('PZB ready');
+    logger.info('PxB ready');
 }
 
 main();

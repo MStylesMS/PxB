@@ -1,10 +1,10 @@
-# PZB Functional Specification
+# PxB Functional Specification
 
 **Status:** Draft v0.1 — design locked, implementation not started.
 
 ## 1. Scope
 
-PZB (Paradox Z Bridge) is a single-process Node.js service that bridges Z-Wave (and later Zigbee / Thread) USB radios to MQTT using the Paradox topic contract. It is deployed on a Linux host (Raspberry Pi or equivalent) and is the sole owner of the radio serial endpoint(s) on that host.
+PxB (Paradox Bridge) is a single-process Node.js service that bridges Z-Wave (and later Zigbee / Thread) USB radios to MQTT using the Paradox topic contract. It is deployed on a Linux host (Raspberry Pi or equivalent) and is the sole owner of the radio serial endpoint(s) on that host.
 
 ## 2. Supported Hardware (Phase 1)
 
@@ -25,7 +25,7 @@ Additional classes (dimmers, multilevel sensors, thermostats, etc.) are explicit
 1. Load an INI configuration file describing the bridge and its known nodes.
 2. Open and own the radio serial port(s) as a singleton driver per radio.
 3. Discover / interview nodes as configured or as newly included.
-4. Normalize radio events into PZB's common event/state schema.
+4. Normalize radio events into PxB's common event/state schema.
 5. Publish node events and state over MQTT per the topic contract.
 6. Publish a retained bridge-level heartbeat at a configured interval.
 7. Accept bridge-level and node-level commands over MQTT and via a CLI.
@@ -41,7 +41,7 @@ Additional classes (dimmers, multilevel sensors, thermostats, etc.) are explicit
 
 ## 6. Process Model
 
-- One PZB process per host.
+- One PxB process per host.
 - Runs under systemd in production; runs via `node src/index.js` in dev.
 - Singleton per radio serial port inside the process.
 - Clean shutdown on SIGTERM: stop any active inclusion, close driver(s), publish bridge `state: stopping`, disconnect MQTT last.
@@ -76,7 +76,7 @@ Retention rules:
 - Bridge `pzb/state`: **retained**, periodic (default 10s).
 - Node `events`: **retained**, published only when an event occurs.
 - Node `state`: **retained**, published only when telemetry changes (state, battery, reachable, tamper).
-- Node `schema`: **retained**, published once at PZB startup (and on driver reconnect).
+- Node `schema`: **retained**, published once at PxB startup (and on driver reconnect).
 - Node `commands` and `warnings`, bridge `commands` and `warnings`: **not retained**.
 - Discovery notices: **retained**.
 
@@ -140,12 +140,12 @@ All commands must be accepted both via MQTT JSON and via the equivalent CLI (`pz
 
 1. Operator starts inclusion via MQTT or `pzb include [--label <name>]`.
 2. Bridge enters `including` state, reflected in `pzb/state`.
-3. When a node joins, PZB interviews it.
+3. When a node joins, PxB interviews it.
 4. On successful interview:
    - Retained discovery notice published on `{base_topic}/pzb/discovered/<radio>/<id>`.
    - INI fragment emitted to stdout and appended to `discovered.ini` sidecar next to the main config.
    - Node is held in runtime registry so events are observable under a `discovered-<n>` label.
-5. Operator edits INI (sets `base_topic`, `type`, `label`) and restarts PZB.
+5. Operator edits INI (sets `base_topic`, `type`, `label`) and restarts PxB.
 
 INI fragment is generated with clearly marked `TODO:` comments for every field requiring human input.
 
@@ -185,7 +185,7 @@ Warnings are JSON: `{ "timestamp", "severity": "info|warn|error", "code", "messa
 
 ## 19. Supported Devices
 
-This section tracks real-world device validation for PZB. Device profile documents live in `docs/supported/` and include pairing and operations notes.
+This section tracks real-world device validation for PxB. Device profile documents live in `docs/supported/` and include pairing and operations notes.
 
 ### 19.1 Z-Wave Devices
 
@@ -197,7 +197,7 @@ This section tracks real-world device validation for PZB. Device profile documen
 
 | Vendor | Model | Device Type | Validation Status | Profile |
 |--------|-------|-------------|-------------------|---------|
-| Third Reality | 3RDS17BZ Door Sensor | Contact sensor | PZB support implemented; hardware validation pending | [Third Reality 3RDS17BZ](supported/third-reality-3rds17bz.md) |
+| Third Reality | 3RDS17BZ Door Sensor | Contact sensor | PxB support implemented; hardware validation pending | [Third Reality 3RDS17BZ](supported/third-reality-3rds17bz.md) |
 
 ## 20. References
 

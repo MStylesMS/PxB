@@ -156,7 +156,7 @@ describe('BridgeCommandHandler: Phase 2 extensions', () => {
         });
         return {
             handler, published, warnings, registry,
-            deliver: (payload) => subs['paradox/test/pzb/commands']?.('paradox/test/pzb/commands', payload),
+            deliver: (payload) => subs['paradox/test/pxb/commands']?.('paradox/test/pxb/commands', payload),
         };
     }
 

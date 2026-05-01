@@ -56,7 +56,7 @@ function applySchema(sectionSchema, rawSection, sectionName) {
 }
 
 /**
- * Load and validate a PZB INI config file.
+ * Load and validate a PxB INI config file.
  * Returns a structured config object.
  */
 function loadConfig(configPath) {
@@ -208,7 +208,7 @@ function loadConfig(configPath) {
     }
 
     if (errors.length) {
-        throw new Error(`PZB config validation failed:\n  ${errors.join('\n  ')}`);
+        throw new Error(`PxB config validation failed:\n  ${errors.join('\n  ')}`);
     }
 
     return config;

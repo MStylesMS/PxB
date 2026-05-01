@@ -7,14 +7,14 @@ Back to spec: [Supported Devices in SPEC](../SPEC.md#19-supported-devices)
 - Vendor: Zooz (The Smartest House)
 - Model: ZSE41 800LR Open/Close XS Sensor
 - Protocol: Z-Wave (800 series, LR-capable model family)
-- Device class in PZB: contact
-- Intended use in PZB: door/window open-close event source for input mapping
+- Device class in PxB: contact
+- Intended use in PxB: door/window open-close event source for input mapping
 
-This profile documents operational notes for using the ZSE41 model family with PZB in contact-sensor workflows.
+This profile documents operational notes for using the ZSE41 model family with PxB in contact-sensor workflows.
 
 ## Pairing and Inclusion
 
-1. Ensure PZB is running and inclusion mode is active:
+1. Ensure PxB is running and inclusion mode is active:
    - MQTT: send startInclusion on the bridge command topic.
    - CLI: use the equivalent include command.
 2. On the sensor, initiate pairing using the device button sequence.
@@ -26,19 +26,19 @@ This profile documents operational notes for using the ZSE41 model family with P
 
 ## Exclusion and Re-inclusion
 
-1. Start exclusion mode from PZB.
+1. Start exclusion mode from PxB.
 2. Trigger the sensor exclusion action (same device button interaction family as inclusion).
 3. Confirm node removal in bridge state and logs.
 4. Re-run inclusion and update node_id in config if the controller assigns a new node number.
 
-## Operation Notes in PZB
+## Operation Notes in PxB
 
 - As a battery-powered contact sensor, the device can sleep between events.
 - Typical wake behavior in this environment:
   - open/close activity wakes and transmits
   - manual pairing button interaction wakes and transmits
 - If events are missing:
-  - verify single PZB process ownership of the radio
+  - verify single PxB process ownership of the radio
   - verify bridge state and inclusion/interview status
   - run refreshNode and then trigger the sensor physically
 
@@ -48,7 +48,7 @@ This profile documents operational notes for using the ZSE41 model family with P
   - bridge state, warnings, discovered
   - node events and node state
 - Logs:
-  - PZB runtime log with signal, inclusion FSM, and publish lines
+  - PxB runtime log with signal, inclusion FSM, and publish lines
 
 ## Official Links
 

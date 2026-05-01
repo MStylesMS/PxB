@@ -24,7 +24,7 @@ describe('publishBridgeWarning', () => {
 
         expect(mock.published).toHaveLength(1);
         const { topic, payload, opts } = mock.published[0];
-        expect(topic).toBe('paradox/test/pzb/warnings');
+        expect(topic).toBe('paradox/test/pxb/warnings');
         expect(opts.retain).toBe(false);
         expect(payload).toMatchObject({
             severity: 'warn',
