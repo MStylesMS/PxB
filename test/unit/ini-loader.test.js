@@ -154,12 +154,29 @@ port = /dev/ttyUSB0
     expect(() => loadConfig(f)).toThrow(/"client_id"/);
   });
 
-  test('no radio section present', () => {
+  test('no radio section present is allowed when no nodes are defined', () => {
     const f = writeTempIni(`
 [mqtt]
 broker = localhost
 client_id = test
 base_topic = paradox/test
+`);
+    const cfg = loadConfig(f);
+    expect(cfg.nodes).toEqual({});
+  });
+
+  test('no radio section fails when node sections are defined', () => {
+    const f = writeTempIni(`
+[mqtt]
+broker = localhost
+client_id = test
+base_topic = paradox/test
+
+[node:door]
+radio = zwave
+node_id = 1
+type = contact
+base_topic = paradox/test/door
 `);
     expect(() => loadConfig(f)).toThrow('At least one radio section');
   });
@@ -253,5 +270,72 @@ base_topic = paradox/test/x
 
   test('config file not found', () => {
     expect(() => loadConfig('/no/such/file.ini')).toThrow('Config file not found');
+  });
+
+  test('parses [light:*] and [light-zone:*] sections', () => {
+    const f = writeTempIni(`
+[mqtt]
+broker = localhost
+client_id = test
+base_topic = paradox/test
+
+[light:wiz-201]
+backend = wiz
+topic = paradox/test/lights/wiz-201
+host = 192.168.1.201
+
+[light:hue-main]
+backend = hue
+topic = paradox/test/lights/hue-main
+host = 192.168.1.5
+api_key = abc123
+
+[light-zone:lights]
+topic = paradox/test/lights
+devices = wiz-201,hue-main
+`);
+
+    const cfg = loadConfig(f);
+    expect(cfg.lights['wiz-201'].backend).toBe('wiz');
+    expect(cfg.lights['hue-main'].backend).toBe('hue');
+    expect(cfg.light_zones.lights.devices).toEqual(['wiz-201', 'hue-main']);
+  });
+
+  test('validates light-zone devices reference existing lights', () => {
+    const f = writeTempIni(`
+[mqtt]
+broker = localhost
+client_id = test
+base_topic = paradox/test
+
+[light:wiz-201]
+backend = wiz
+topic = paradox/test/lights/wiz-201
+host = 192.168.1.201
+
+[light-zone:lights]
+topic = paradox/test/lights
+devices = wiz-201,missing-light
+`);
+
+    expect(() => loadConfig(f)).toThrow('references unknown light "missing-light"');
+  });
+
+  test('parses [switch:*] sections', () => {
+    const f = writeTempIni(`
+[mqtt]
+broker = localhost
+client_id = test
+base_topic = paradox/test
+
+[switch:relay-1]
+backend = shelly
+topic = paradox/test/switch/relay-1
+host = 192.168.1.50
+`);
+
+    const cfg = loadConfig(f);
+    expect(cfg.switches['relay-1'].backend).toBe('shelly');
+    expect(cfg.switches['relay-1'].host).toBe('192.168.1.50');
   });
 });

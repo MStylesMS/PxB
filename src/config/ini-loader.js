@@ -3,7 +3,14 @@
 const fs = require('fs');
 const path = require('path');
 const ini = require('ini');
-const { SCHEMA, VALID_NODE_LABEL, VALID_RADIOS, VALID_TYPES } = require('./schema');
+const {
+    SCHEMA,
+    VALID_NODE_LABEL,
+    VALID_RADIOS,
+    VALID_TYPES,
+    VALID_LIGHT_BACKENDS,
+    VALID_SWITCH_BACKENDS,
+} = require('./schema');
 
 /**
  * Parse a string value according to a schema type.
@@ -67,7 +74,12 @@ function loadConfig(configPath) {
 
     const raw = ini.parse(fs.readFileSync(absPath, 'utf8'));
     const errors = [];
-    const config = { nodes: {} };
+    const config = {
+        nodes: {},
+        lights: {},
+        light_zones: {},
+        switches: {},
+    };
 
     // --- [mqtt] (required) ---
     if (!raw.mqtt) {
@@ -202,8 +214,117 @@ function loadConfig(configPath) {
         config.nodes[label] = node;
     }
 
-    // At least one radio must be present
-    if (!raw.zwave && !raw.zigbee) {
+    // --- [light:<label>] sections ---
+    const seenLightTopics = new Map(); // topic -> section label
+    for (const [sectionKey, sectionVal] of Object.entries(raw)) {
+        if (!sectionKey.startsWith('light:')) continue;
+        const label = sectionKey.slice(6).trim();
+
+        if (!VALID_NODE_LABEL.test(label)) {
+            errors.push(`[${sectionKey}] invalid label format — must match [a-z0-9][a-z0-9-]*`);
+            continue;
+        }
+
+        let light;
+        try {
+            light = applySchema(SCHEMA.light, sectionVal, sectionKey);
+        } catch (e) {
+            errors.push(e.message);
+            continue;
+        }
+
+        if (!VALID_LIGHT_BACKENDS.has(light.backend)) {
+            errors.push(`[${sectionKey}] unknown backend "${light.backend}" — expected: ${[...VALID_LIGHT_BACKENDS].join(', ')}`);
+        }
+
+        if (light.backend === 'hue' && (!light.host || !light.api_key)) {
+            errors.push(`[${sectionKey}] backend=hue requires "host" and "api_key"`);
+        }
+
+        if (light.backend === 'wiz' && !light.host) {
+            errors.push(`[${sectionKey}] backend=wiz requires "host"`);
+        }
+
+        if (seenLightTopics.has(light.topic)) {
+            errors.push(`[${sectionKey}] topic "${light.topic}" already used by light "${seenLightTopics.get(light.topic)}"`);
+        } else {
+            seenLightTopics.set(light.topic, label);
+        }
+
+        light.label = label;
+        config.lights[label] = light;
+    }
+
+    // --- [light-zone:<label>] sections ---
+    for (const [sectionKey, sectionVal] of Object.entries(raw)) {
+        if (!sectionKey.startsWith('light-zone:')) continue;
+        const label = sectionKey.slice(11).trim();
+
+        if (!VALID_NODE_LABEL.test(label)) {
+            errors.push(`[${sectionKey}] invalid label format — must match [a-z0-9][a-z0-9-]*`);
+            continue;
+        }
+
+        let zone;
+        try {
+            zone = applySchema(SCHEMA['light-zone'], sectionVal, sectionKey);
+        } catch (e) {
+            errors.push(e.message);
+            continue;
+        }
+
+        zone.label = label;
+        zone.devices = String(zone.devices)
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean);
+
+        if (zone.devices.length === 0) {
+            errors.push(`[${sectionKey}] devices must contain at least one light label`);
+            continue;
+        }
+
+        for (const deviceLabel of zone.devices) {
+            if (!config.lights[deviceLabel]) {
+                errors.push(`[${sectionKey}] references unknown light "${deviceLabel}"`);
+            }
+        }
+
+        config.light_zones[label] = zone;
+    }
+
+    // --- [switch:<label>] sections ---
+    for (const [sectionKey, sectionVal] of Object.entries(raw)) {
+        if (!sectionKey.startsWith('switch:')) continue;
+        const label = sectionKey.slice(7).trim();
+
+        if (!VALID_NODE_LABEL.test(label)) {
+            errors.push(`[${sectionKey}] invalid label format — must match [a-z0-9][a-z0-9-]*`);
+            continue;
+        }
+
+        let sw;
+        try {
+            sw = applySchema(SCHEMA.switch, sectionVal, sectionKey);
+        } catch (e) {
+            errors.push(e.message);
+            continue;
+        }
+
+        if (!VALID_SWITCH_BACKENDS.has(sw.backend)) {
+            errors.push(`[${sectionKey}] unknown backend "${sw.backend}" — expected: ${[...VALID_SWITCH_BACKENDS].join(', ')}`);
+        }
+
+        if (sw.backend === 'shelly' && !sw.host) {
+            errors.push(`[${sectionKey}] backend=shelly requires "host"`);
+        }
+
+        sw.label = label;
+        config.switches[label] = sw;
+    }
+
+    // At least one radio must be present when node sections are defined.
+    if (Object.keys(config.nodes).length > 0 && !raw.zwave && !raw.zigbee) {
         errors.push('At least one radio section ([zwave] or [zigbee]) must be present');
     }
 

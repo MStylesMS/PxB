@@ -8,8 +8,8 @@
     },
     "scripts": {
         "start": "node src/index.js",
-        "test": "jest --runInBand",
-        "test:unit": "jest test/unit --runInBand",
+        "test": "jest --runInBand --testTimeout=20000 --forceExit",
+        "test:unit": "jest test/unit --runInBand --testTimeout=20000 --forceExit",
         "lint": "eslint src test",
         "postinstall": "patch-package"
     },

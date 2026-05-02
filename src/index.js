@@ -18,6 +18,11 @@ const { ZigbeeInclusion } = require('./radios/zigbee/inclusion');
 const { NodeCommandHandler } = require('./bridge/node-command-handler');
 const { DiscoveredStore } = require('./discovery/discovered-store');
 const { bridgeTopics } = require('./mqtt/contract');
+const HueAdapter = require('./lights/hue');
+const WizAdapter = require('./lights/wiz');
+const LifxAdapter = require('./lights/lifx');
+const ShellyAdapter = require('./switches/shelly');
+const LightZoneAdapter = require('./lights/zone');
 
 // --- Argument parsing (minimal, no deps) ---
 function parseArgs(argv) {
@@ -294,28 +299,99 @@ async function main() {
     });
 
     // --- Domain adapters (lights, switches, inputs, outputs) ---
-    // Scaffold: initialize empty adapter maps; R3-R4 agents will populate these.
     const domainAdapters = {
-        lights: new Map(),      // Backend → adapter instances (e.g., 'hue' → [HueAdapter, ...])
-        switches: new Map(),    // Backend → adapter instances (e.g., 'shelly' → [ShellyAdapter, ...])
+        lights: new Map(),      // label -> adapter instance
+        switches: new Map(),    // label -> adapter instance
         inputs: new Map(),      // Input aggregator zone → InputsAdapter
         outputs: new Map(),     // Output aggregator zone → OutputsAdapter
     };
 
-    // Placeholder: load configured domain adapters once backends are implemented.
-    // For now, log which zones are configured but not yet instantiated.
-    try {
-        const lightsZones = Object.keys(config).filter((k) => k.startsWith('lights:'));
-        const switchesZones = Object.keys(config).filter((k) => k.startsWith('switches:'));
-        const inputsZones = Object.keys(config).filter((k) => k.startsWith('inputs:'));
-        const outputsZones = Object.keys(config).filter((k) => k.startsWith('outputs:'));
+    const publishAdapterInitWarning = (topic, label, message) => {
+        mqtt.publish(`${topic}/warnings`, {
+            code: 'ADAPTER_INIT_FAILED',
+            message,
+            label,
+            timestamp: new Date().toISOString(),
+        }, { retain: false });
+    };
 
-        if (lightsZones.length > 0) logger.info(`Lights zones configured: ${lightsZones.join(', ')} (adapters not yet implemented)`);
-        if (switchesZones.length > 0) logger.info(`Switches zones configured: ${switchesZones.join(', ')} (adapters not yet implemented)`);
-        if (inputsZones.length > 0) logger.info(`Inputs zones configured: ${inputsZones.join(', ')} (aggregator not yet implemented)`);
-        if (outputsZones.length > 0) logger.info(`Outputs zones configured: ${outputsZones.join(', ')} (aggregator not yet implemented)`);
-    } catch (err) {
-        logger.warn(`Failed to enumerate domain adapters: ${err.message}`);
+    // Initialize light device adapters first, then light-zone fan-out adapters.
+    for (const [label, lightConfig] of Object.entries(config.lights || {})) {
+        try {
+            let adapter;
+            switch (lightConfig.backend) {
+                case 'hue':
+                    adapter = new HueAdapter({ config: lightConfig, mqttClient: mqtt, logger });
+                    break;
+                case 'wiz':
+                    adapter = new WizAdapter({ config: lightConfig, mqttClient: mqtt, logger });
+                    break;
+                case 'lifx':
+                    adapter = new LifxAdapter({ config: lightConfig, mqttClient: mqtt, logger });
+                    break;
+                default:
+                    throw new Error(`Unsupported light backend: ${lightConfig.backend}`);
+            }
+
+            await adapter.init();
+            domainAdapters.lights.set(label, adapter);
+            logger.info(`Light adapter '${label}' initialized (${lightConfig.backend})`);
+        } catch (err) {
+            logger.warn(`Light adapter '${label}' failed to initialize: ${err.message}`);
+            publishAdapterInitWarning(lightConfig.topic, label, err.message);
+        }
+    }
+
+    for (const [label, zoneConfig] of Object.entries(config.light_zones || {})) {
+        try {
+            const members = new Map();
+            for (const deviceLabel of zoneConfig.devices) {
+                const member = domainAdapters.lights.get(deviceLabel);
+                if (!member) {
+                    logger.warn(`Light zone '${label}' missing initialized member '${deviceLabel}'`);
+                    continue;
+                }
+                members.set(deviceLabel, member);
+            }
+
+            if (members.size === 0) {
+                throw new Error('No member adapters initialized');
+            }
+
+            const zoneAdapter = new LightZoneAdapter({
+                config: zoneConfig,
+                mqttClient: mqtt,
+                logger,
+                memberAdapters: members,
+            });
+            await zoneAdapter.init();
+
+            domainAdapters.lights.set(label, zoneAdapter);
+            logger.info(`Light zone '${label}' initialized with ${members.size} members`);
+        } catch (err) {
+            logger.warn(`Light zone '${label}' failed to initialize: ${err.message}`);
+            publishAdapterInitWarning(zoneConfig.topic, label, err.message);
+        }
+    }
+
+    for (const [label, switchConfig] of Object.entries(config.switches || {})) {
+        try {
+            let adapter;
+            switch (switchConfig.backend) {
+                case 'shelly':
+                    adapter = new ShellyAdapter({ config: switchConfig, mqttClient: mqtt, logger });
+                    break;
+                default:
+                    throw new Error(`Unsupported switch backend: ${switchConfig.backend}`);
+            }
+
+            await adapter.init();
+            domainAdapters.switches.set(label, adapter);
+            logger.info(`Switch adapter '${label}' initialized (${switchConfig.backend})`);
+        } catch (err) {
+            logger.warn(`Switch adapter '${label}' failed to initialize: ${err.message}`);
+            publishAdapterInitWarning(switchConfig.topic, label, err.message);
+        }
     }
 
     // --- Z-Wave startup (non-fatal: failures schedule reconnect) ---
@@ -342,15 +418,11 @@ async function main() {
         
         // Dispose domain adapters
         try {
-            for (const [, adapters] of domainAdapters.lights) {
-                for (const adapter of adapters) {
-                    try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
-                }
+            for (const [, adapter] of domainAdapters.lights) {
+                try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
             }
-            for (const [, adapters] of domainAdapters.switches) {
-                for (const adapter of adapters) {
-                    try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
-                }
+            for (const [, adapter] of domainAdapters.switches) {
+                try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
             }
             for (const [, adapter] of domainAdapters.inputs) {
                 try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }

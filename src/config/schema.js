@@ -55,9 +55,8 @@ const SCHEMA = {
         input_channel: { required: false, type: 'string', default: '0' },
         low_battery_threshold: { required: false, type: 'int', default: 20 },
     },
-    'lights:*': {
-        // Lights zones follow pattern [lights:zone_name]
-        // Backend-specific configuration (hue, lifx, wiz, etc.)
+    light: {
+        // Light device sections follow pattern [light:device_name]
         backend: { required: true, type: 'string' },
         topic: { required: true, type: 'string' },
         device_id: { required: false, type: 'string' },
@@ -67,9 +66,13 @@ const SCHEMA = {
         brightness: { required: false, type: 'int', default: 100 },
         timeout_s: { required: false, type: 'int', default: 10 },
     },
-    'switches:*': {
-        // Switches zones follow pattern [switches:zone_name]
-        // For smart switches and relays (Shelly, Z-Wave, etc.)
+    'light-zone': {
+        // Light group sections follow pattern [light-zone:group_name]
+        topic: { required: true, type: 'string' },
+        devices: { required: true, type: 'string' },
+    },
+    switch: {
+        // Switch device sections follow pattern [switch:device_name]
         backend: { required: true, type: 'string' },
         topic: { required: true, type: 'string' },
         device_id: { required: false, type: 'string' },
