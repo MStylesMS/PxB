@@ -37,19 +37,43 @@ class LightZoneAdapter extends AdapterBase {
             return;
         }
 
+        const entries = Array.from(this.memberAdapters.entries());
+        const settled = await Promise.allSettled(entries.map(async ([label, adapter]) => {
+            const result = await adapter.executeCommand(payload);
+            return { label, result };
+        }));
+
+        const successful = [];
         const failures = [];
-        for (const [label, adapter] of this.memberAdapters.entries()) {
-            try {
-                await adapter.executeCommand(payload);
-            } catch (err) {
-                failures.push({ label, error: err.message });
-                this.logger.warn(`LightZoneAdapter: member '${label}' command failed: ${err.message}`);
+        const warned = [];
+
+        settled.forEach((result, index) => {
+            const label = entries[index][0];
+            if (result.status === 'fulfilled') {
+                successful.push(label);
+                if (result.value.result && result.value.result.warning) {
+                    warned.push({ label, warning: result.value.result.warning });
+                    this.logger.warn(`LightZoneAdapter: member '${label}' degraded: ${result.value.result.warning}`);
+                }
+                return;
             }
+
+            failures.push({ label, error: result.reason ? result.reason.message : 'Unknown error' });
+            this.logger.warn(`LightZoneAdapter: member '${label}' command failed: ${result.reason ? result.reason.message : 'Unknown error'}`);
+        });
+
+        if (failures.length === entries.length) {
+            this.publishWarning('LIGHT_ZONE_ALL_MEMBERS_FAILED', 'All light members failed to execute command', {
+                failures,
+            });
+            throw new Error(`All light members failed: ${failures.map((f) => `${f.label}: ${f.error}`).join('; ')}`);
         }
 
-        if (failures.length > 0) {
+        if (failures.length > 0 || warned.length > 0) {
             this.publishWarning('LIGHT_ZONE_MEMBER_COMMAND_FAILED', 'One or more light members failed to execute command', {
                 failures,
+                warned,
+                successful,
             });
         }
 

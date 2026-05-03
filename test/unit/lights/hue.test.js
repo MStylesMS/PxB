@@ -157,8 +157,13 @@ describe('HueAdapter', () => {
             });
             jest.spyOn(adapter, '_setLight').mockResolvedValue();
             jest.spyOn(adapter, '_setScene').mockResolvedValue();
-            jest.spyOn(adapter, '_allOn').mockResolvedValue();
-            jest.spyOn(adapter, '_allOff').mockResolvedValue();
+            jest.spyOn(adapter, '_applyColorScene').mockResolvedValue();
+            jest.spyOn(adapter, '_turnOn').mockResolvedValue();
+            jest.spyOn(adapter, '_turnOff').mockResolvedValue();
+            jest.spyOn(adapter, '_setBrightness').mockResolvedValue();
+            jest.spyOn(adapter, '_setColor').mockResolvedValue();
+            jest.spyOn(adapter, '_setColorTemp').mockResolvedValue();
+            jest.spyOn(adapter, '_fade').mockResolvedValue();
 
             await adapter.init();
             mockMqtt.publish.mockClear();
@@ -176,16 +181,46 @@ describe('HueAdapter', () => {
             expect(adapter._setScene).toHaveBeenCalledWith({ action: 'setScene', sceneId: '1' });
         });
 
+        it('should handle setColorScene action', async () => {
+            await adapter.executeCommand({ action: 'setColorScene', scene: 'cyan' });
+
+            expect(adapter._applyColorScene).toHaveBeenCalledWith('cyan');
+        });
+
         it('should handle allOn action', async () => {
             await adapter.executeCommand({ action: 'allOn' });
 
-            expect(adapter._allOn).toHaveBeenCalled();
+            expect(adapter._turnOn).toHaveBeenCalledWith({ action: 'allOn' });
         });
 
         it('should handle allOff action', async () => {
             await adapter.executeCommand({ action: 'allOff' });
 
-            expect(adapter._allOff).toHaveBeenCalled();
+            expect(adapter._turnOff).toHaveBeenCalled();
+        });
+
+        it('should handle setBrightness action', async () => {
+            await adapter.executeCommand({ action: 'setBrightness', brightness: 40 });
+
+            expect(adapter._setBrightness).toHaveBeenCalledWith({ action: 'setBrightness', brightness: 40 });
+        });
+
+        it('should handle setColor action', async () => {
+            await adapter.executeCommand({ action: 'setColor', color: '#00DCFF', brightness: 75 });
+
+            expect(adapter._setColor).toHaveBeenCalledWith({ action: 'setColor', color: '#00DCFF', brightness: 75 });
+        });
+
+        it('should handle setColorTemp action', async () => {
+            await adapter.executeCommand({ action: 'setColorTemp', kelvin: 3000 });
+
+            expect(adapter._setColorTemp).toHaveBeenCalledWith({ action: 'setColorTemp', kelvin: 3000 });
+        });
+
+        it('should handle fade action', async () => {
+            await adapter.executeCommand({ action: 'fade', brightness: 20, duration: 2 });
+
+            expect(adapter._fade).toHaveBeenCalledWith({ action: 'fade', brightness: 20, duration: 2 });
         });
 
         it('should warn on unknown action', async () => {
@@ -249,6 +284,23 @@ describe('HueAdapter', () => {
             expect(() => {
                 adapter._assertNotDisposed();
             }).toThrow(/Operation called after dispose/);
+        });
+    });
+
+    describe('scene_map parsing', () => {
+        it('should allow scene_map overrides from config', () => {
+            adapter = new HueAdapter({
+                config: {
+                    topic: 'paradox/houdini/lights/mirror',
+                    host: '192.168.1.100',
+                    api_key: 'test-key',
+                    scene_map: '{"cyan":{"on":true,"r":1,"g":2,"b":3,"brightness":40}}',
+                },
+                mqttClient: mockMqtt,
+                logger: mockLogger,
+            });
+
+            expect(adapter.sceneMap.cyan).toEqual({ on: true, r: 1, g: 2, b: 3, brightness: 40 });
         });
     });
 

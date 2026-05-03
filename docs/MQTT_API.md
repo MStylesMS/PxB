@@ -196,6 +196,31 @@ Not retained. Only meaningful for output-capable types (relay, switch, dimmer).
 
 Unknown commands produce a per-node warning and are ignored.
 
+## 9a. Light Commands (`{light.topic}/commands`)
+
+For configured light backends (`hue`, `wiz`, `lifx`), PxB accepts light-zone commands on the same Paradox command topic shape:
+
+```json
+{ "command": "scene", "scene": "cyan" }
+{ "command": "setColorScene", "scene": "cyan" }
+{ "command": "setColorScene", "scene": "warmWhite" }
+{ "command": "on", "brightness": 80 }
+{ "command": "off" }
+{ "command": "setBrightness", "brightness": 65 }
+{ "command": "setColor", "color": "#00DCFF", "brightness": 75 }
+{ "command": "setColorTemp", "kelvin": 3000, "brightness": 70 }
+{ "command": "fade", "brightness": 15, "duration": 2 }
+{ "command": "allOff" }
+{ "command": "allOn" }
+{ "command": "getState" }
+{ "command": "getStatus" }
+```
+
+`setColorScene` is the PFx-compatible scene command used by existing room/operator UIs.
+
+Built-in scene names are aligned across Hue/WiZ/LIFX and can be tuned per backend with `scene_map` in INI:
+- `normal`, `dim`, `red`, `blue`, `green`, `yellow`, `orange`, `purple`, `pink`, `cyan`, `magenta`, `white`, `softWhite`, `brightWhite`, `warmWhite`, `coolWhite`, `off`
+
 ## 10. Per-Node Warnings (`{node.base_topic}/warnings`)
 
 Not retained. Same shape as bridge warnings.

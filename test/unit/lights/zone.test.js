@@ -66,6 +66,29 @@ describe('LightZoneAdapter', () => {
         );
     });
 
+    test('throws when all members fail', async () => {
+        const memberA = { executeCommand: jest.fn().mockRejectedValue(new Error('member-a-fail')) };
+        const memberB = { executeCommand: jest.fn().mockRejectedValue(new Error('member-b-fail')) };
+        const adapter = new LightZoneAdapter({
+            config: { topic: 'paradox/houdini/lights' },
+            mqttClient: mockMqtt,
+            logger: mockLogger,
+            memberAdapters: new Map([
+                ['a', memberA],
+                ['b', memberB],
+            ]),
+        });
+
+        await adapter.init();
+        await expect(adapter.executeCommand({ command: 'allOn' })).rejects.toThrow('All light members failed');
+
+        expect(mockMqtt.publish).toHaveBeenCalledWith(
+            expect.stringContaining('/warnings'),
+            expect.stringContaining('LIGHT_ZONE_ALL_MEMBERS_FAILED'),
+            expect.any(Object)
+        );
+    });
+
     test('rejects initialization with no members', async () => {
         const adapter = new LightZoneAdapter({
             config: { topic: 'paradox/houdini/lights' },

@@ -64,6 +64,8 @@ const SCHEMA = {
         host: { required: false, type: 'string' },
         port: { required: false, type: 'int' },
         brightness: { required: false, type: 'int', default: 100 },
+        hue_profile: { required: false, type: 'string' },
+        scene_map: { required: false, type: 'string' },
         timeout_s: { required: false, type: 'int', default: 10 },
     },
     'light-zone': {

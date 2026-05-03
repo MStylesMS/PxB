@@ -102,6 +102,7 @@ describe('LifxAdapter', () => {
     describe('executeCommand', () => {
         beforeEach(() => {
             adapter = new LifxAdapter({ config, mqttClient: mockMqtt, logger: mockLogger });
+            jest.spyOn(adapter, '_applyColorScene').mockResolvedValue();
         });
 
         it('should warn on invalid payload type', async () => {
@@ -122,6 +123,18 @@ describe('LifxAdapter', () => {
             );
         });
 
+        it('should handle setColorScene action', async () => {
+            await adapter.executeCommand({ action: 'setColorScene', scene: 'cyan' });
+
+            expect(adapter._applyColorScene).toHaveBeenCalledWith('cyan');
+        });
+
+        it('should handle setScene action as alias', async () => {
+            await adapter.executeCommand({ action: 'setScene', scene: 'cyan' });
+
+            expect(adapter._applyColorScene).toHaveBeenCalledWith('cyan');
+        });
+
         it('should reject commands after disposal', async () => {
             adapter._markDisposed();
             await expect(adapter.executeCommand({ action: 'allOn' }))
@@ -140,6 +153,21 @@ describe('LifxAdapter', () => {
             adapter = new LifxAdapter({ config, mqttClient: mockMqtt, logger: mockLogger });
             await adapter.dispose();
             await expect(adapter.dispose()).rejects.toThrow('dispose');
+        });
+    });
+
+    describe('scene_map parsing', () => {
+        it('should allow scene_map overrides from config', () => {
+            adapter = new LifxAdapter({
+                config: {
+                    ...config,
+                    scene_map: '{"cyan":{"on":true,"r":1,"g":2,"b":3,"brightness":40}}',
+                },
+                mqttClient: mockMqtt,
+                logger: mockLogger,
+            });
+
+            expect(adapter.sceneMap.cyan).toEqual({ on: true, r: 1, g: 2, b: 3, brightness: 40 });
         });
     });
 });

@@ -89,6 +89,9 @@ describe('WizAdapter', () => {
     describe('executeCommand', () => {
         beforeEach(() => {
             adapter = new WizAdapter({ config, mqttClient: mockMqtt, logger: mockLogger });
+            jest.spyOn(adapter, '_applyColorScene').mockResolvedValue();
+            jest.spyOn(adapter, '_fetchState').mockResolvedValue({ on: true, brightness: 50, sceneId: 0 });
+            jest.spyOn(adapter, '_publishState').mockImplementation(() => {});
         });
 
         it('should warn on invalid payload type', async () => {
@@ -107,6 +110,12 @@ describe('WizAdapter', () => {
                 expect.stringContaining('WIZ_CMD_UNKNOWN'),
                 expect.any(Object)
             );
+        });
+
+        it('should handle setColorScene action', async () => {
+            await adapter.executeCommand({ action: 'setColorScene', scene: 'cyan' });
+
+            expect(adapter._applyColorScene).toHaveBeenCalledWith('cyan');
         });
 
         it('should reject commands after disposal', async () => {
@@ -159,6 +168,21 @@ describe('WizAdapter', () => {
             adapter = new WizAdapter({ config, mqttClient: mockMqtt, logger: mockLogger });
             await adapter.dispose();
             await expect(adapter.dispose()).rejects.toThrow('dispose');
+        });
+    });
+
+    describe('scene_map parsing', () => {
+        it('should allow scene_map overrides from config', () => {
+            adapter = new WizAdapter({
+                config: {
+                    ...config,
+                    scene_map: '{"cyan":{"state":true,"r":1,"g":2,"b":3,"dimming":40}}',
+                },
+                mqttClient: mockMqtt,
+                logger: mockLogger,
+            });
+
+            expect(adapter.sceneMap.cyan).toEqual({ state: true, r: 1, g: 2, b: 3, dimming: 40 });
         });
     });
 });

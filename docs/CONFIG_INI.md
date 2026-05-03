@@ -140,3 +140,30 @@ label = discovered-003                                  ; TODO: set human label
 - `node_id` values within a radio must be unique.
 
 Validation failures fail fast at startup with an actionable error message.
+
+## `[light:<label>]`
+
+Light device sections are used for direct network/cloud light backends (`hue`, `wiz`, `lifx`).
+
+| Key | Type | Required | Default | Description |
+|-----|------|:--------:|---------|-------------|
+| `backend` | string | yes | — | `hue` \| `wiz` \| `lifx` |
+| `topic` | string | yes | — | Zone topic root for `{commands,state,warnings,events}` |
+| `api_key` | string | backend-specific | — | Required for `hue` and `lifx` |
+| `host` | string | backend-specific | — | Required for `hue` and `wiz` |
+| `port` | int | no | backend default | Optional per-backend port override |
+| `brightness` | int | no | `100` | Default brightness level |
+| `hue_profile` | string | no | `color` | Hue rendering mode: `color`, `ct`, or `dim` |
+| `scene_map` | string(JSON) | no | built-in defaults | Per-backend scene overrides keyed by scene name |
+| `timeout_s` | int | no | `10` | Request timeout |
+
+`scene_map` lets operators tune scene color matching between vendors without code changes. Example:
+
+```ini
+[light:room-hue]
+backend = hue
+topic = paradox/houdini/lights
+host = 192.168.1.40
+api_key = <hue-app-key>
+scene_map = {"cyan":{"on":true,"r":0,"g":210,"b":255,"brightness":72}}
+```
