@@ -104,9 +104,7 @@ class AdapterBase {
         }
         const topic = `${this.config.topic}/warnings`;
         const payload = { code, message, timestamp: new Date().toISOString(), ...details };
-        this.mqttClient.publish(topic, JSON.stringify(payload), { retain: false }).catch((err) => {
-            this.logger.error(`${this.name}: Failed to publish warning`, { code, err: err.message });
-        });
+        this.mqttClient.publish(topic, JSON.stringify(payload), { retain: false });
     }
 
     /**
@@ -120,9 +118,7 @@ class AdapterBase {
             return;
         }
         const topic = `${this.config.topic}/state`;
-        this.mqttClient.publish(topic, JSON.stringify(state), { retain: true }).catch((err) => {
-            this.logger.error(`${this.name}: Failed to publish state`, { err: err.message });
-        });
+        this.mqttClient.publish(topic, JSON.stringify(state), { retain: true });
     }
 
     /**
@@ -138,9 +134,7 @@ class AdapterBase {
         }
         const topic = `${this.config.topic}/events`;
         const msg = { event, timestamp: new Date().toISOString(), ...payload };
-        this.mqttClient.publish(topic, JSON.stringify(msg), { retain: false }).catch((err) => {
-            this.logger.error(`${this.name}: Failed to publish event`, { event, err: err.message });
-        });
+        this.mqttClient.publish(topic, JSON.stringify(msg), { retain: false });
     }
 
     /**

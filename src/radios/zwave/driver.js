@@ -2,6 +2,7 @@
 
 const EventEmitter = require('events');
 const logger = require('../../util/logger');
+const { usbReset } = require('../../util/usb-reset');
 
 /**
  * ZWaveDriver — lifecycle wrapper around zwave-js `Driver`.
@@ -131,6 +132,24 @@ class ZWaveDriver extends EventEmitter {
         try {
             await this._driver.start();
         } catch (err) {
+            // On the very first startup attempt, a stuck serial state from a
+            // prior unclean exit can cause EBUSY or similar errors.
+            // Try a USB-level reset once before falling back to timed reconnect.
+            if (this._isFirstAttempt() && isSerialFatal(err)) {
+                logger.warn(`Z-Wave start failed (${err.message}) — attempting USB reset of ${this._port}`);
+                this.emit('warning', {
+                    severity: 'warn',
+                    code: 'ZWAVE_USB_RESET_ATTEMPT',
+                    message: `Serial fatal on first start — attempting USB reset`,
+                    context: { port: this._port, reason: err.message },
+                });
+                try {
+                    await usbReset(this._port);
+                    logger.info(`Z-Wave USB reset complete — retrying start`);
+                } catch (resetErr) {
+                    logger.warn(`Z-Wave USB reset failed: ${resetErr.message} — continuing to backoff reconnect`);
+                }
+            }
             this._onFatalError(err, 'ZWAVE_START_FAILED');
             this._scheduleReconnect();
             return;
@@ -191,7 +210,15 @@ class ZWaveDriver extends EventEmitter {
                 message: this._lastError,
                 context: { port: this._port },
             });
-            if (this._state === 'connected') this._setState('degraded');
+            // HOST_FATAL_ERROR means the serial layer is unrecoverable in this
+            // driver instance — destroy and reconnect instead of staying degraded.
+            if (isSerialFatal(err)) {
+                logger.error(`Z-Wave serial fatal error — scheduling reconnect`);
+                this._onFatalError(err, 'ZWAVE_SERIAL_FATAL');
+                this._scheduleReconnect();
+            } else if (this._state === 'connected') {
+                this._setState('degraded');
+            }
         });
 
         // Hook newly included nodes so we start receiving their value updates immediately.
@@ -298,12 +325,13 @@ class ZWaveDriver extends EventEmitter {
             context: { port: this._port },
         });
         this._setState('error');
-        // Attempt to destroy any partially constructed driver
-        try {
-            this._driver?.destroy?.();
-        } catch { /* ignore */ }
+        // Await destroy so the serial port is released before any reconnect attempt.
+        const drv = this._driver;
         this._driver = null;
         this.emit('disconnected');
+        if (drv) {
+            Promise.resolve(drv.destroy?.()).catch(() => { /* ignore */ });
+        }
     }
 
     _scheduleReconnect() {
@@ -337,6 +365,11 @@ class ZWaveDriver extends EventEmitter {
         this.emit('state-changed', next, prev);
     }
 
+    /** True only on the very first start attempt (backoff hasn't advanced yet). */
+    _isFirstAttempt() {
+        return this._currentBackoff === this._backoffMinMs;
+    }
+
     /** Graceful shutdown. */
     async stop() {
         this._shuttingDown = true;
@@ -359,6 +392,24 @@ class ZWaveDriver extends EventEmitter {
 function hexToBuffer(hex) {
     const clean = String(hex).replace(/^0x/i, '').replace(/[^0-9a-f]/gi, '');
     return Buffer.from(clean, 'hex');
+}
+
+/**
+ * Returns true when the error indicates a serial-port-level failure that a
+ * USB reset or reconnect could recover from.
+ */
+function isSerialFatal(err) {
+    const msg = (err?.message || '').toLowerCase();
+    return (
+        msg.includes('host_fatal_error') ||
+        msg.includes('ebusy') ||
+        msg.includes('resource busy') ||
+        msg.includes('enoent') ||
+        msg.includes('no such file') ||
+        msg.includes('cannot lock port') ||
+        msg.includes('failed to open') ||
+        msg.includes('serial port is not open')
+    );
 }
 
 module.exports = { ZWaveDriver };

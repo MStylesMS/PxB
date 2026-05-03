@@ -69,6 +69,10 @@ File permissions should be `0600` when keys are present.
 
 PxB's Zigbee runtime is pinned to the Ember adapter for Sonoff EFR32MG21 coordinators (for example Dongle-LMG21). Legacy adapter modes are not supported.
 
+When `db_path` is set (or defaulted), PxB also writes two companion files in the same directory:
+- Device DB startup snapshot: `<db_path>.backup` (for example `zigbee.db.backup`)
+- Coordinator network backup: `zigbee-network.db`
+
 File permissions should be `0600` when `network_key` is set.
 
 ## `[node:<label>]`

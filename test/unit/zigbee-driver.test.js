@@ -90,6 +90,22 @@ describe('ZigbeeDriver', () => {
         await d.stop();
     });
 
+    test('builds default network backup path as zigbee-network.db beside db_path', async () => {
+        const behavior = { startBehavior: 'success' };
+        const d = new ZigbeeDriver({
+            port: '/dev/ttyUSB1',
+            adapter: 'ember',
+            databasePath: '/opt/paradox/config/zigbee.db',
+            controllerFactory: makeFactory(behavior),
+        });
+
+        await d.start();
+        expect(behavior.instance._opts.databasePath).toBe('/opt/paradox/config/zigbee.db');
+        expect(behavior.instance._opts.databaseBackupPath).toBe('/opt/paradox/config/zigbee.db.backup');
+        expect(behavior.instance._opts.backupPath).toBe('/opt/paradox/config/zigbee-network.db');
+        await d.stop();
+    });
+
     test('start(): rejection is captured → warning emitted and reconnect scheduled', async () => {
         const behavior = { startBehavior: 'reject', error: new Error('no port') };
         const d = new ZigbeeDriver({
@@ -165,5 +181,103 @@ describe('ZigbeeDriver', () => {
         expect(mEvt.data.zonestatus).toBe(1);
 
         await d.stop();
+    });
+
+    describe('USB reset on first startup failure', () => {
+        let mockUsbReset;
+
+        beforeEach(() => {
+            jest.resetModules();
+            mockUsbReset = jest.fn().mockResolvedValue();
+            jest.doMock('../../src/util/usb-reset', () => ({ usbReset: mockUsbReset }));
+        });
+
+        afterEach(() => {
+            jest.dontMock('../../src/util/usb-reset');
+        });
+
+        test('attempts USB reset on first start when HOST_FATAL_ERROR occurs', async () => {
+            const { ZigbeeDriver: FreshDriver } = require('../../src/radios/zigbee/driver');
+            const fatalErr = new Error('Failed to start: HOST_FATAL_ERROR');
+            let attempt = 0;
+            const factory = () => {
+                attempt++;
+                return new MockHerdsmanController({}, {
+                    startBehavior: attempt === 1 ? 'reject' : 'success',
+                    error: fatalErr,
+                });
+            };
+            const d = new FreshDriver({
+                port: '/dev/ttyUSB0',
+                controllerFactory: factory,
+                backoffMinMs: 10,
+                backoffMaxMs: 50,
+            });
+            const warnings = [];
+            d.on('warning', (w) => warnings.push(w));
+
+            // Start will fail, trigger USB reset, schedule reconnect
+            await d.start().catch(() => {});
+            // Wait for reconnect + second attempt
+            await waitForEvent(d, 'connected', 500);
+
+            expect(mockUsbReset).toHaveBeenCalledWith('/dev/ttyUSB0');
+            expect(warnings.some((w) => w.code === 'ZIGBEE_USB_RESET_ATTEMPT')).toBe(true);
+            await d.stop();
+        });
+
+        test('does NOT attempt USB reset on second startup failure', async () => {
+            const { ZigbeeDriver: FreshDriver } = require('../../src/radios/zigbee/driver');
+            const fatalErr = new Error('HOST_FATAL_ERROR');
+            let attempt = 0;
+            const factory = () => {
+                attempt++;
+                return new MockHerdsmanController({}, { startBehavior: 'reject', error: fatalErr });
+            };
+            const d = new FreshDriver({
+                port: '/dev/ttyUSB0',
+                controllerFactory: factory,
+                backoffMinMs: 10,
+                backoffMaxMs: 50,
+            });
+
+            // First attempt — USB reset fires
+            await d.start().catch(() => {});
+            // Advance backoff by waiting for first reconnect
+            await new Promise((r) => setTimeout(r, 30));
+            const resetCallsAfterFirst = mockUsbReset.mock.calls.length;
+
+            // Second reconnect should NOT call usbReset
+            await new Promise((r) => setTimeout(r, 60));
+            expect(mockUsbReset.mock.calls.length).toBe(resetCallsAfterFirst);
+
+            await d.stop();
+        });
+
+        test('continues to reconnect even if USB reset itself fails', async () => {
+            const { ZigbeeDriver: FreshDriver } = require('../../src/radios/zigbee/driver');
+            mockUsbReset.mockRejectedValue(new Error('sudo failed'));
+            const fatalErr = new Error('HOST_FATAL_ERROR');
+            let attempt = 0;
+            const factory = () => {
+                attempt++;
+                return new MockHerdsmanController({}, {
+                    startBehavior: attempt === 1 ? 'reject' : 'success',
+                    error: fatalErr,
+                });
+            };
+            const d = new FreshDriver({
+                port: '/dev/ttyUSB0',
+                controllerFactory: factory,
+                backoffMinMs: 10,
+                backoffMaxMs: 50,
+            });
+
+            await d.start().catch(() => {});
+            // Should still reconnect and succeed despite USB reset failure
+            await waitForEvent(d, 'connected', 500);
+            expect(d.state).toBe('connected');
+            await d.stop();
+        });
     });
 });

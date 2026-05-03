@@ -41,6 +41,8 @@ class WizAdapter extends AdapterBase {
         this.updateTimer = null;
         this._subscribed = false;
         this._socket = null;
+        this._pollFailCount = 0;
+        this._connectivity = 'online'; // 'online' | 'degraded'
     }
 
     async init() {
@@ -68,9 +70,19 @@ class WizAdapter extends AdapterBase {
         this.updateTimer = setInterval(() => {
             this._fetchState().then((s) => {
                 this.state = s;
+                if (this._connectivity !== 'online') {
+                    this._connectivity = 'online';
+                    this._pollFailCount = 0;
+                    this.logger.info(`WizAdapter: ${this.host} recovered`);
+                }
                 this._publishState();
             }).catch((err) => {
-                this.logger.warn(`WizAdapter: Poll failed: ${err.message}`);
+                this._pollFailCount++;
+                this.logger.warn(`WizAdapter: Poll failed (${this._pollFailCount}): ${err.message}`);
+                if (this._pollFailCount >= 3 && this._connectivity !== 'degraded') {
+                    this._connectivity = 'degraded';
+                    this._publishDegraded(err.message);
+                }
             });
         }, 5000);
 
@@ -155,9 +167,21 @@ class WizAdapter extends AdapterBase {
     _publishState() {
         this.publishState({
             type: 'wiz',
+            status: 'online',
             host: this.host,
             timestamp: new Date().toISOString(),
             ...this.state,
+        });
+    }
+
+    _publishDegraded(reason) {
+        this.publishWarning('WIZ_DEVICE_UNREACHABLE', `Device at ${this.host} is not responding: ${reason}`);
+        this.publishState({
+            type: 'wiz',
+            status: 'degraded',
+            host: this.host,
+            reason,
+            timestamp: new Date().toISOString(),
         });
     }
 

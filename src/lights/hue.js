@@ -42,6 +42,8 @@ class HueAdapter extends AdapterBase {
         this.lights = new Map();     // light_id → { state, reachable, ... }
         this.updateTimer = null;
         this._subscribed = false;
+        this._pollFailCount = 0;
+        this._connectivity = 'online'; // 'online' | 'degraded'
     }
 
     /**
@@ -265,9 +267,19 @@ class HueAdapter extends AdapterBase {
             for (const [lightId, lightState] of Object.entries(lights)) {
                 this.lights.set(lightId, lightState);
             }
+            if (this._connectivity !== 'online') {
+                this._connectivity = 'online';
+                this._pollFailCount = 0;
+                this.logger.info(`HueAdapter: ${this.host} recovered`);
+            }
             this._publishState();
         } catch (err) {
-            this.logger.warn(`HueAdapter: Poll failed: ${err.message}`);
+            this._pollFailCount++;
+            this.logger.warn(`HueAdapter: Poll failed (${this._pollFailCount}): ${err.message}`);
+            if (this._pollFailCount >= 3 && this._connectivity !== 'degraded') {
+                this._connectivity = 'degraded';
+                this._publishDegraded(err.message);
+            }
         }
     }
 
@@ -287,8 +299,19 @@ class HueAdapter extends AdapterBase {
         this.publishState({
             type: 'hue',
             timestamp: new Date().toISOString(),
-            connected: true,
+            status: 'online',
             lights,
+        });
+    }
+
+    _publishDegraded(reason) {
+        this.publishWarning('HUE_BRIDGE_UNREACHABLE', `Bridge at ${this.host} is not responding: ${reason}`);
+        this.publishState({
+            type: 'hue',
+            status: 'degraded',
+            host: this.host,
+            reason,
+            timestamp: new Date().toISOString(),
         });
     }
 

@@ -232,4 +232,82 @@ describe('ZWaveDriver: non-fatal driver error', () => {
 
         await d.stop();
     });
+
+    test('HOST_FATAL_ERROR driver error triggers reconnect instead of staying degraded', async () => {
+        const warnings = [];
+        let capturedDriver;
+        const factory = (port, opts) => {
+            capturedDriver = new MockDriver(port, opts, { startBehavior: 'success' });
+            return capturedDriver;
+        };
+        const d = new ZWaveDriver({ port: '/dev/ttyFAKE', driverFactory: factory });
+        d.on('warning', (w) => warnings.push(w));
+
+        await d.start();
+        await waitForEvent(d, 'connected');
+        expect(d.state).toBe('connected');
+
+        // Emit a serial-fatal error mid-session
+        capturedDriver.emit('error', new Error('Serial port is not open'));
+
+        expect(d.state).toBe('error');
+        const codes = warnings.map((w) => w.code);
+        expect(codes).toContain('ZWAVE_SERIAL_FATAL');
+        // Reconnect should be scheduled (driver stops cleanly)
+        expect(d.lastError).toMatch(/serial port is not open/i);
+
+        await d.stop();
+    });
+});
+
+describe('ZWaveDriver USB reset on first startup failure', () => {
+    let mockUsbReset;
+
+    beforeEach(() => {
+        jest.resetModules();
+        mockUsbReset = jest.fn().mockResolvedValue();
+        jest.doMock('../../src/util/usb-reset', () => ({ usbReset: mockUsbReset }));
+    });
+
+    afterEach(() => {
+        jest.dontMock('../../src/util/usb-reset');
+    });
+
+    test('attempts USB reset on first start when EBUSY occurs', async () => {
+        const { ZWaveDriver: FreshDriver } = require('../../src/radios/zwave/driver');
+        const fatalErr = new Error('EBUSY: resource busy or locked');
+        let attempt = 0;
+        const factory = (port, opts) => {
+            attempt++;
+            return new MockDriver(port, opts, {
+                startBehavior: attempt === 1 ? 'reject' : 'success',
+                error: fatalErr,
+            });
+        };
+        const d = new FreshDriver({ port: '/dev/ttyFAKE', driverFactory: factory, backoffMinMs: 10, backoffMaxMs: 50 });
+        const warnings = [];
+        d.on('warning', (w) => warnings.push(w));
+
+        await d.start();
+        await waitForEvent(d, 'connected', 500);
+
+        expect(mockUsbReset).toHaveBeenCalledWith('/dev/ttyFAKE');
+        expect(warnings.some((w) => w.code === 'ZWAVE_USB_RESET_ATTEMPT')).toBe(true);
+        await d.stop();
+    });
+
+    test('does NOT attempt USB reset on subsequent startup failures', async () => {
+        const { ZWaveDriver: FreshDriver } = require('../../src/radios/zwave/driver');
+        const fatalErr = new Error('EBUSY: resource busy or locked');
+        const factory = (port, opts) => new MockDriver(port, opts, { startBehavior: 'reject', error: fatalErr });
+        const d = new FreshDriver({ port: '/dev/ttyFAKE', driverFactory: factory, backoffMinMs: 10, backoffMaxMs: 50 });
+
+        await d.start();
+        await new Promise((r) => setTimeout(r, 30));
+        const afterFirst = mockUsbReset.mock.calls.length;
+        await new Promise((r) => setTimeout(r, 60));
+        expect(mockUsbReset.mock.calls.length).toBe(afterFirst); // no additional calls
+
+        await d.stop();
+    });
 });

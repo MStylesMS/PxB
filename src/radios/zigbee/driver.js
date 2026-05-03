@@ -1,7 +1,9 @@
 'use strict';
 
 const EventEmitter = require('events');
+const path = require('path');
 const logger = require('../../util/logger');
+const { usbReset } = require('../../util/usb-reset');
 
 /**
  * ZigbeeDriver — lifecycle wrapper around the `zigbee-herdsman` Controller.
@@ -58,6 +60,7 @@ class ZigbeeDriver extends EventEmitter {
         this._controllerFactory = opts.controllerFactory || null;
         this._backoffMinMs = opts.backoffMinMs ?? 1000;
         this._backoffMaxMs = opts.backoffMaxMs ?? 30_000;
+        this._startTimeoutMs = opts.startTimeoutMs ?? 15000;
 
         this._controller = null;
         this._state = 'stopped';
@@ -160,8 +163,14 @@ class ZigbeeDriver extends EventEmitter {
         this._wireEvents(this._controller);
 
         try {
-            // herdsman.start() resolves with 'resumed'|'reset'|'restored'
-            const result = await this._controller.start();
+            // herdsman.start() resolves with 'resumed'|'reset'|'restored'.
+            // Guard with a timeout so a wedged serial stack cannot leave us
+            // stuck in "starting" forever.
+            const result = await withTimeout(
+                this._controller.start(),
+                this._startTimeoutMs,
+                `Zigbee controller start timed out after ${this._startTimeoutMs}ms`
+            );
             logger.info(`Zigbee controller start result: ${result ?? 'ok'}`);
             this._currentBackoff = this._backoffMinMs;
             this._lastError = null;
@@ -173,6 +182,27 @@ class ZigbeeDriver extends EventEmitter {
             // "Cannot lock port" immediately.
             try { await this._controller?.stop(); } catch { /* ignore */ }
             this._controller = null;
+
+            // On the very first startup attempt, a stuck EZSP state from a
+            // prior unclean process exit can produce HOST_FATAL_ERROR or EBUSY.
+            // Try a USB-level reset once before falling back to timed reconnect.
+            if (this._isFirstAttempt() && isSerialFatal(err)) {
+                logger.warn(`Zigbee start failed (${err.message}) — attempting USB reset of ${this._port}`);
+                this.emit('warning', {
+                    severity: 'warn',
+                    code: 'ZIGBEE_USB_RESET_ATTEMPT',
+                    message: `Serial fatal on first start — attempting USB reset`,
+                    context: { port: this._port, reason: err.message },
+                });
+                try {
+                    await usbReset(this._port);
+                    logger.info(`Zigbee USB reset complete — retrying start`);
+                } catch (resetErr) {
+                    logger.warn(`Zigbee USB reset failed: ${resetErr.message} — continuing to backoff reconnect`);
+                }
+                // Fall through to normal reconnect (backoff stays at min, so it fires quickly)
+            }
+
             this._onFatalError(err, 'ZIGBEE_START_FAILED');
             this._scheduleReconnect();
         }
@@ -186,7 +216,7 @@ class ZigbeeDriver extends EventEmitter {
         if (this._databasePath) {
             opts.databasePath = this._databasePath;
             opts.databaseBackupPath = `${this._databasePath}.backup`;
-            opts.backupPath = `${this._databasePath}.network.backup`;
+            opts.backupPath = path.join(path.dirname(this._databasePath), 'zigbee-network.db');
         }
         if (this._network) opts.network = this._network;
         return opts;
@@ -205,12 +235,16 @@ class ZigbeeDriver extends EventEmitter {
                 context: { port: this._port },
             });
             if (this._state === 'connected') this._setState('degraded');
-            // Tear down and rebuild.
-            try { controller.stop?.(); } catch { /* ignore */ }
-            this._controller = null;
-            this._setState('stopped');
-            this.emit('disconnected');
-            this._scheduleReconnect();
+            // Tear down and rebuild — await so the serial port is released
+            // before the reconnect attempt opens it again.
+            const stopAndReconnect = async () => {
+                try { await controller.stop?.(); } catch { /* ignore */ }
+                this._controller = null;
+                this._setState('stopped');
+                this.emit('disconnected');
+                this._scheduleReconnect();
+            };
+            stopAndReconnect().catch(() => { /* ignore */ });
         });
 
         controller.on('deviceJoined', (event) => {
@@ -279,9 +313,14 @@ class ZigbeeDriver extends EventEmitter {
             context: { port: this._port, adapter: this._adapter },
         });
         this._setState('error');
-        try { this._controller?.stop?.(); } catch { /* ignore */ }
+        // Note: callers in _attachAndStart already awaited controller.stop() before
+        // reaching here; this path covers any remaining direct-call scenarios.
+        const ctrl = this._controller;
         this._controller = null;
         this.emit('disconnected');
+        if (ctrl) {
+            Promise.resolve(ctrl.stop?.()).catch(() => { /* ignore */ });
+        }
     }
 
     _scheduleReconnect() {
@@ -315,6 +354,11 @@ class ZigbeeDriver extends EventEmitter {
         this.emit('state-changed', next, prev);
     }
 
+    /** True only on the very first start attempt (backoff hasn't advanced yet). */
+    _isFirstAttempt() {
+        return this._currentBackoff === this._backoffMinMs;
+    }
+
     async stop() {
         this._shuttingDown = true;
         if (this._reconnectTimer) {
@@ -342,6 +386,33 @@ function normalizeIeee(raw) {
     const s = String(raw).trim().toLowerCase().replace(/^0x/, '').replace(/[^0-9a-f]/g, '');
     if (!s) return null;
     return `0x${s.padStart(16, '0')}`;
+}
+
+/**
+ * Returns true when the error indicates a serial-port-level failure that a
+ * USB reset could recover from (stuck EZSP state, port busy, port disappeared).
+ */
+function isSerialFatal(err) {
+    const msg = (err?.message || '').toLowerCase();
+    return (
+        msg.includes('host_fatal_error') ||
+        msg.includes('ebusy') ||
+        msg.includes('resource busy') ||
+        msg.includes('enoent') ||
+        msg.includes('no such file') ||
+        msg.includes('cannot lock port') ||
+        msg.includes('failed to open')
+    );
+}
+
+function withTimeout(promise, timeoutMs, message) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+            const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+            if (typeof timer.unref === 'function') timer.unref();
+        }),
+    ]);
 }
 
 module.exports = { ZigbeeDriver, normalizeIeee };

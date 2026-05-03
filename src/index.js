@@ -23,6 +23,11 @@ const WizAdapter = require('./lights/wiz');
 const LifxAdapter = require('./lights/lifx');
 const ShellyAdapter = require('./switches/shelly');
 const LightZoneAdapter = require('./lights/zone');
+const UnavailableOutputAdapter = require('./adapters/unavailable-output');
+
+const LOCK_DIR_CANDIDATES = ['/run/paradox', '/tmp/paradox'];
+let singletonLockPath = null;
+let singletonLockFd = null;
 
 // --- Argument parsing (minimal, no deps) ---
 function parseArgs(argv) {
@@ -53,6 +58,8 @@ async function main() {
         process.stderr.write(`${err.message}\n`);
         process.exit(1);
     }
+
+    await acquireSingletonLock();
 
     // Apply log level (args override config)
     const logLevel = args.logLevel || config.global.log_level || 'info';
@@ -298,6 +305,26 @@ async function main() {
         zigbeeEvents,
     });
 
+    // --- Start radios before output adapter initialization ---
+    // Light/switch adapter init can block for tens of seconds when devices are
+    // unreachable. Start radios first so input events (e.g., contact sensors)
+    // are available immediately during degraded output scenarios.
+    if (zwaveDriver) {
+        try {
+            await zwaveDriver.start();
+        } catch (err) {
+            logger.error(`Z-Wave initial start failed (will retry): ${err.message}`);
+        }
+    }
+
+    if (zigbeeDriver) {
+        try {
+            await zigbeeDriver.start();
+        } catch (err) {
+            logger.error(`Zigbee initial start failed (will retry): ${err.message}`);
+        }
+    }
+
     // --- Domain adapters (lights, switches, inputs, outputs) ---
     const domainAdapters = {
         lights: new Map(),      // label -> adapter instance
@@ -313,6 +340,25 @@ async function main() {
             label,
             timestamp: new Date().toISOString(),
         }, { retain: false });
+    };
+
+    const attachUnavailableOutput = async ({ label, backend, domain, config, reason, targetMap }) => {
+        if (!config || !config.topic) {
+            return;
+        }
+
+        const fallback = new UnavailableOutputAdapter({
+            config,
+            mqttClient: mqtt,
+            logger,
+            reason,
+            label,
+            backend,
+            domain,
+        });
+
+        await fallback.init();
+        targetMap.set(label, fallback);
     };
 
     // Initialize light device adapters first, then light-zone fan-out adapters.
@@ -339,6 +385,14 @@ async function main() {
         } catch (err) {
             logger.warn(`Light adapter '${label}' failed to initialize: ${err.message}`);
             publishAdapterInitWarning(lightConfig.topic, label, err.message);
+            await attachUnavailableOutput({
+                label,
+                backend: lightConfig.backend,
+                domain: 'light',
+                config: lightConfig,
+                reason: err.message,
+                targetMap: domainAdapters.lights,
+            });
         }
     }
 
@@ -371,6 +425,14 @@ async function main() {
         } catch (err) {
             logger.warn(`Light zone '${label}' failed to initialize: ${err.message}`);
             publishAdapterInitWarning(zoneConfig.topic, label, err.message);
+            await attachUnavailableOutput({
+                label,
+                backend: 'light-zone',
+                domain: 'light-zone',
+                config: zoneConfig,
+                reason: err.message,
+                targetMap: domainAdapters.lights,
+            });
         }
     }
 
@@ -391,24 +453,14 @@ async function main() {
         } catch (err) {
             logger.warn(`Switch adapter '${label}' failed to initialize: ${err.message}`);
             publishAdapterInitWarning(switchConfig.topic, label, err.message);
-        }
-    }
-
-    // --- Z-Wave startup (non-fatal: failures schedule reconnect) ---
-    if (zwaveDriver) {
-        try {
-            await zwaveDriver.start();
-        } catch (err) {
-            logger.error(`Z-Wave initial start failed (will retry): ${err.message}`);
-        }
-    }
-
-    // --- Zigbee startup (non-fatal: failures schedule reconnect) ---
-    if (zigbeeDriver) {
-        try {
-            await zigbeeDriver.start();
-        } catch (err) {
-            logger.error(`Zigbee initial start failed (will retry): ${err.message}`);
+            await attachUnavailableOutput({
+                label,
+                backend: switchConfig.backend,
+                domain: 'switch',
+                config: switchConfig,
+                reason: err.message,
+                targetMap: domainAdapters.switches,
+            });
         }
     }
 
@@ -443,15 +495,132 @@ async function main() {
         heartbeat.flush({ state: 'stopping' });
         heartbeat.stop();
         await mqtt.disconnect();
+        releaseSingletonLock();
         logger.info('PxB stopped');
         logger.close();
         process.exit(0);
     }
 
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
+    let shutdownInProgress = false;
+    async function safeShutdown(reason) {
+        if (shutdownInProgress) return;
+        shutdownInProgress = true;
+        await shutdown(reason);
+    }
+
+    process.on('SIGTERM', () => safeShutdown('SIGTERM'));
+    process.on('SIGINT',  () => safeShutdown('SIGINT'));
+    process.on('uncaughtException', (err) => {
+        logger.error(`Uncaught exception — shutting down: ${err.stack || err.message}`);
+        safeShutdown('CRASH').finally(() => process.exit(1));
+    });
+    process.on('unhandledRejection', (reason) => {
+        const msg = reason instanceof Error ? reason.stack || reason.message : String(reason);
+        logger.error(`Unhandled rejection — shutting down: ${msg}`);
+        safeShutdown('CRASH').finally(() => process.exit(1));
+    });
 
     logger.info('PxB ready');
+}
+
+/**
+ * Acquire a singleton lock for PxB. If another PxB instance is holding the lock,
+ * terminate it, clean up stale lock state, and retry acquisition.
+ */
+async function acquireSingletonLock() {
+    const fs = require('fs');
+    if (!singletonLockPath) {
+        singletonLockPath = resolveLockPath(fs);
+    }
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            singletonLockFd = fs.openSync(singletonLockPath, 'wx');
+            fs.writeFileSync(singletonLockFd, `${process.pid}\n`, 'utf8');
+            return;
+        } catch (err) {
+            if (err.code !== 'EEXIST') throw err;
+        }
+
+        const existingPid = readLockedPid(fs);
+        if (!existingPid || existingPid === process.pid) {
+            safeUnlink(fs, singletonLockPath);
+            continue;
+        }
+
+        terminateProcess(existingPid);
+        await waitForProcessExit(existingPid, 3000);
+        safeUnlink(fs, singletonLockPath);
+    }
+
+    throw new Error(`PxB could not acquire singleton lock at ${singletonLockPath}`);
+}
+
+function resolveLockPath(fs) {
+    for (const dirPath of LOCK_DIR_CANDIDATES) {
+        try {
+            fs.mkdirSync(dirPath, { recursive: true });
+            const testPath = `${dirPath}/.pxb.lock.test`;
+            const fd = fs.openSync(testPath, 'w');
+            fs.closeSync(fd);
+            fs.unlinkSync(testPath);
+            return `${dirPath}/pxb.lock`;
+        } catch {
+            // try next candidate
+        }
+    }
+    throw new Error('PxB could not find a writable lock directory (/run/paradox or /tmp/paradox)');
+}
+
+function readLockedPid(fs) {
+    try {
+        const raw = fs.readFileSync(singletonLockPath, 'utf8').trim();
+        const pid = Number(raw);
+        return Number.isInteger(pid) && pid > 0 ? pid : null;
+    } catch {
+        return null;
+    }
+}
+
+function terminateProcess(pid) {
+    try { process.kill(pid, 'SIGTERM'); } catch { return; }
+}
+
+async function waitForProcessExit(pid, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        if (!isProcessAlive(pid)) return;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    if (isProcessAlive(pid)) {
+        try { process.kill(pid, 'SIGTERM'); } catch { /* already gone */ }
+        try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+        await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+}
+
+function isProcessAlive(pid) {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function safeUnlink(fs, filePath) {
+    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+}
+
+function releaseSingletonLock() {
+    const fs = require('fs');
+    if (singletonLockFd !== null) {
+        try { fs.closeSync(singletonLockFd); } catch { /* ignore */ }
+        singletonLockFd = null;
+    }
+    if (singletonLockPath) {
+        safeUnlink(fs, singletonLockPath);
+    }
 }
 
 main();
