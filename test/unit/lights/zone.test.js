@@ -99,4 +99,31 @@ describe('LightZoneAdapter', () => {
 
         await expect(adapter.init()).rejects.toThrow('at least one member adapter');
     });
+
+    test('publishes lighting.activeScene in zone state and emits scene event', async () => {
+        const memberA = { executeCommand: jest.fn().mockResolvedValue() };
+        const adapter = new LightZoneAdapter({
+            config: { topic: 'paradox/houdini/lights' },
+            mqttClient: mockMqtt,
+            logger: mockLogger,
+            memberAdapters: new Map([
+                ['a', memberA],
+            ]),
+        });
+
+        await adapter.init();
+        await adapter.executeCommand({ command: 'scene', name: 'softWhite' });
+
+        expect(mockMqtt.publish).toHaveBeenCalledWith(
+            'paradox/houdini/lights/events',
+            expect.stringContaining('scene-activated'),
+            expect.any(Object)
+        );
+
+        expect(mockMqtt.publish).toHaveBeenCalledWith(
+            'paradox/houdini/lights/state',
+            expect.stringContaining('"lighting":{"activeScene":"softWhite"}'),
+            expect.any(Object)
+        );
+    });
 });

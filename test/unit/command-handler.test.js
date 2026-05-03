@@ -30,7 +30,7 @@ function makeSetup(overrides = {}) {
 }
 
 describe('BridgeCommandHandler: getNetworkStatus', () => {
-    test('publishes state to pzb/state with retain:true', () => {
+    test('publishes state to pxb/state with retain:true', () => {
         const { published, deliver } = makeSetup();
         deliver({ command: 'getNetworkStatus' });
         expect(published).toHaveLength(1);

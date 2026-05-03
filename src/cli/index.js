@@ -5,9 +5,9 @@
  * PxB CLI — read-only status/inspection commands.
  *
  * Usage:
- *   pzb status     --config <path>  [--timeout <ms>]
- *   pzb list-nodes --config <path>
- *   pzb help
+ *   pxb status     --config <path>  [--timeout <ms>]
+ *   pxb list-nodes --config <path>
+ *   pxb help
  */
 
 const path = require('path');
@@ -59,7 +59,7 @@ function prettyJson(obj) {
 // ---- Subcommands -----------------------------------------------------------
 
 /**
- * `pzb status` — subscribe to pzb/state, print the first message, then exit.
+ * `pxb status` — subscribe to pxb/state, print the first message, then exit.
  */
 async function cmdStatus(args) {
     const configPath = requireConfig(args);
@@ -104,7 +104,7 @@ async function cmdStatus(args) {
 }
 
 /**
- * `pzb list-nodes` — read config and print all configured nodes.
+ * `pxb list-nodes` — read config and print all configured nodes.
  * Does not require a live MQTT connection.
  */
 function cmdListNodes(args) {
@@ -150,11 +150,11 @@ function cmdListNodes(args) {
 }
 
 /**
- * `pzb help`
+ * `pxb help`
  */
 function cmdHelp() {
     process.stdout.write(
-        'Usage: pzb <subcommand> --config <path/to/pzb.ini> [options]\n\n' +
+        'Usage: pxb <subcommand> --config <path/to/pxb.ini> [options]\n\n' +
         'Subcommands:\n' +
         '  status                        Print current bridge status (reads from MQTT)\n' +
         '  list-nodes                    Print configured nodes from INI (no broker needed)\n' +
@@ -169,7 +169,7 @@ function cmdHelp() {
         '  dump-ini --node-id N          Print the discovered INI fragment for a node\n' +
         '  help                          Show this help\n\n' +
         'Options:\n' +
-        '  --config, -c <path>           Path to pzb.ini  (required)\n' +
+        '  --config, -c <path>           Path to pxb.ini  (required)\n' +
         '  --timeout <ms>                Timeout for status/discovery commands (default: 5000)\n' +
         '  --ms <N>                      Pulse duration in ms (for `relay <label> pulse`)\n' +
         '  --timeout-s <N>               Inclusion/exclusion timeout seconds\n' +
@@ -242,7 +242,7 @@ async function cmdRefreshNode(args) {
     const config = _loadConfigOrExit(requireConfig(args));
     const target = args.positional[1];
     if (!target && !args.ieee) {
-        process.stderr.write('Usage: pzb refresh-node <label|node_id|ieee> [--radio zwave|zigbee] --config <path>\n');
+        process.stderr.write('Usage: pxb refresh-node <label|node_id|ieee> [--radio zwave|zigbee] --config <path>\n');
         process.exit(1);
     }
     let extra = { ..._radioExtra(args) };
@@ -275,7 +275,7 @@ async function cmdRemoveFailedNode(args) {
         extra.node_id = Number(target);
         if (!extra.radio) extra.radio = 'zwave';
     } else {
-        process.stderr.write('Usage: pzb remove-failed-node <node_id|ieee> [--radio zwave|zigbee] --config <path>\n');
+        process.stderr.write('Usage: pxb remove-failed-node <node_id|ieee> [--radio zwave|zigbee] --config <path>\n');
         process.exit(1);
     }
     await _publishBridgeCommand(config, 'removeFailedNode', extra);
@@ -286,7 +286,7 @@ async function cmdRelay(args) {
     const label = args.positional[1];
     const action = (args.positional[2] || '').toLowerCase();
     if (!label || !['on', 'off', 'pulse'].includes(action)) {
-        process.stderr.write('Usage: pzb relay <label> on|off|pulse [--ms N] --config <path>\n');
+        process.stderr.write('Usage: pxb relay <label> on|off|pulse [--ms N] --config <path>\n');
         process.exit(1);
     }
     const entry = config.nodes[label];
@@ -315,7 +315,7 @@ async function cmdRelay(args) {
 }
 
 /**
- * `pzb dump-ini --node-id N` — read the DiscoveredStore sidecar file and print
+ * `pxb dump-ini --node-id N` — read the DiscoveredStore sidecar file and print
  * the fragment for the requested node. No live MQTT needed.
  */
 function cmdDumpIni(args) {

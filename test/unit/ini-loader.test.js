@@ -34,7 +34,7 @@ port = /dev/ttyUSB0
     expect(cfg.mqtt.base_topic).toBe('paradox/test');
     expect(cfg.global.heartbeat_interval).toBe(10);
     expect(cfg.global.log_level).toBe('info');
-    expect(cfg.global.discovered_base_topic).toBe('paradox/test/pzb/discovered');
+    expect(cfg.global.discovered_base_topic).toBe('paradox/test/pxb/discovered');
     expect(cfg.zwave.port).toBe('/dev/ttyUSB0');
     expect(cfg.zwave.include_timeout_s).toBe(60);
     expect(cfg.nodes).toEqual({});

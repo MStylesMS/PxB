@@ -109,7 +109,7 @@ function loadConfig(configPath) {
 
     // Resolve discovered_base_topic default (depends on mqtt.base_topic)
     if (!config.global.discovered_base_topic && config.mqtt) {
-        config.global.discovered_base_topic = `${config.mqtt.base_topic}/pzb/discovered`;
+        config.global.discovered_base_topic = `${config.mqtt.base_topic}/pxb/discovered`;
     }
 
     // --- [zwave] (optional) ---

@@ -13,7 +13,7 @@ function makeMockMqtt() {
 }
 
 describe('publishBridgeWarning', () => {
-    test('publishes to {base_topic}/pzb/warnings with correct shape', () => {
+    test('publishes to {base_topic}/pxb/warnings with correct shape', () => {
         const mock = makeMockMqtt();
         publishBridgeWarning(mock, 'paradox/test', {
             severity: 'warn',

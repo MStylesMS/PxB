@@ -8,6 +8,7 @@ class LightZoneAdapter extends AdapterBase {
 
         this.memberAdapters = memberAdapters instanceof Map ? memberAdapters : new Map();
         this._subscribed = false;
+        this._activeScene = null;
     }
 
     async init() {
@@ -36,6 +37,8 @@ class LightZoneAdapter extends AdapterBase {
             this.publishWarning('LIGHT_ZONE_CMD_INVALID', 'Command payload must be a JSON object');
             return;
         }
+
+        const inferredScene = this._inferActiveScene(payload);
 
         const entries = Array.from(this.memberAdapters.entries());
         const settled = await Promise.allSettled(entries.map(async ([label, adapter]) => {
@@ -77,6 +80,21 @@ class LightZoneAdapter extends AdapterBase {
             });
         }
 
+        if (inferredScene !== undefined) {
+            this._activeScene = inferredScene;
+        }
+
+        this.publishEvent('command-executed', {
+            command: payload.command || payload.action || null,
+            scene: this._activeScene,
+            successful,
+            failed: failures.map((f) => f.label),
+        });
+
+        if (inferredScene !== undefined) {
+            this.publishEvent('scene-activated', { scene: inferredScene });
+        }
+
         this._publishState();
     }
 
@@ -96,7 +114,32 @@ class LightZoneAdapter extends AdapterBase {
             timestamp: new Date().toISOString(),
             members: Array.from(this.memberAdapters.keys()),
             member_count: this.memberAdapters.size,
+            activeScene: this._activeScene,
+            lighting: {
+                activeScene: this._activeScene,
+            },
         });
+    }
+
+    _inferActiveScene(payload) {
+        const action = String(payload.command || payload.action || '').toLowerCase();
+        if (action === 'scene' || action === 'setcolorscene') {
+            const name = payload.name || payload.scene;
+            if (typeof name === 'string' && name.trim()) return name.trim();
+            return undefined;
+        }
+
+        if (action === 'setscene') {
+            const name = payload.name || payload.scene;
+            if (typeof name === 'string' && name.trim()) return name.trim();
+            return undefined;
+        }
+
+        if (action === 'off' || action === 'alloff') {
+            return 'off';
+        }
+
+        return undefined;
     }
 
     async _handleCommand(message) {

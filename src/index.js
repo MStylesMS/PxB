@@ -46,7 +46,7 @@ async function main() {
     const args = parseArgs(process.argv);
 
     if (!args.config) {
-        process.stderr.write('Usage: pzb --config <path/to/pzb.ini>\n');
+        process.stderr.write('Usage: pxb --config <path/to/pxb.ini>\n');
         process.exit(1);
     }
 

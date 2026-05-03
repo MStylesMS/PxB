@@ -4,11 +4,11 @@ const logger = require('../util/logger');
 const { bridgeTopics } = require('../mqtt/contract');
 
 /**
- * BridgeCommandHandler — subscribes to `{baseTopic}/pzb/commands` and routes
+ * BridgeCommandHandler — subscribes to `{baseTopic}/pxb/commands` and routes
  * incoming command payloads to registered handlers.
  *
  * Supported commands:
- *   getNetworkStatus   — publish pzb/state immediately
+ *   getNetworkStatus   — publish pxb/state immediately
  *   startInclusion     — begin Z-Wave inclusion (optional: { timeout_s })
  *   stopInclusion      — abort in-progress inclusion
  *   startExclusion     — begin Z-Wave exclusion

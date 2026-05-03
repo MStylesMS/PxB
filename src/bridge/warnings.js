@@ -4,7 +4,7 @@ const { bridgeTopics } = require('../mqtt/contract');
 const logger = require('../util/logger');
 
 /**
- * Publishes a bridge-level warning JSON to {base_topic}/pzb/warnings.
+ * Publishes a bridge-level warning JSON to {base_topic}/pxb/warnings.
  *
  * Shape:
  *   { timestamp, severity, code, message, context }

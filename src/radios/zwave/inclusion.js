@@ -13,7 +13,7 @@ const logger = require('../../util/logger');
  *     `beginExclusion()` calls with a sane default strategy.
  *   - Arm a timeout; if it elapses with no result, call stopInclusion/stopExclusion
  *     and emit a TIMEOUT warning.
- *   - Surface current state for the heartbeat `pzb/state.inclusion` block.
+ *   - Surface current state for the heartbeat `pxb/state.inclusion` block.
  *
  * Events emitted:
  *   'state-changed' (newState, prevState)
