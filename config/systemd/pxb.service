@@ -16,7 +16,7 @@ WorkingDirectory=/opt/paradox/apps/PxB
 
 # Path to config — override via a drop-in or edit directly
 ExecStart=/usr/bin/node /opt/paradox/apps/PxB/src/index.js \
-    --config /opt/paradox/config/pxb.ini \
+    --config /opt/paradox/config/pzb.ini \
     --log-level info
 
 # Graceful shutdown: SIGTERM first, then SIGKILL after 10s

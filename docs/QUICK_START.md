@@ -178,23 +178,23 @@ with a ready-to-paste INI fragment.
 Copy the bundled template:
 
 ```bash
-sudo cp /opt/paradox/apps/PxB/config/systemd/pzb.service /etc/systemd/system/pzb.service
+sudo cp /opt/paradox/apps/PxB/config/systemd/pxb.service /etc/systemd/system/pxb.service
 # Edit ExecStart and --config path if your config is in a different location
-sudo nano /etc/systemd/system/pzb.service
+sudo nano /etc/systemd/system/pxb.service
 ```
 
 Then enable and start:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now pzb
-sudo systemctl status pzb
+sudo systemctl enable --now pxb
+sudo systemctl status pxb
 ```
 
 Check logs:
 
 ```bash
-journalctl -u pzb -f
+journalctl -u pxb -f
 ```
 
 ## 10. Serial Port Permission

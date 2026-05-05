@@ -104,7 +104,7 @@ Gate: CLI status and MQTT `getNetworkStatus` agree.
 
 ### 1.5 Packaging ✅
 
-- [x] Commit systemd unit template under `config/systemd/pzb.service`. 🟢
+- [x] Commit systemd unit template under `config/systemd/pxb.service`. 🟢
 - [x] Publish minimal `docs/QUICK_START.md` walkthrough with real commands. 🟢
 
 Gate: installable on a Pi and boots under systemd.
