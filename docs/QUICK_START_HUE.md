@@ -5,13 +5,10 @@ This guide covers the current Philips Hue path in PxB.
 ## Current Scope
 
 - PxB supports direct Hue control via `[light:*]` sections with `backend = hue`.
-- The current adapter drives the Hue bridge's `groups/0/action` all-lights group for
-  scene, on/off, brightness, color, and color-temperature commands.
-- If you need per-light targeting, PxB currently exposes that only through the
-  advanced `setLight` command with a raw Hue `lightId`.
-
-If you need room/zone/resource targeting like the old PFx guide documented, see
-[PR_PFX_BACKEND_MIGRATION_GAPS.md](PR_PFX_BACKEND_MIGRATION_GAPS.md).
+- One Hue section can target the whole bridge, a specific Hue group, or a single
+  Hue light.
+- Grouped control across multiple light vendors is handled by generic
+  `[light-zone:*]` sections, not by a Hue-specific grouping layer.
 
 ## 1. Create a Hue API Key
 
@@ -43,7 +40,33 @@ topic       = paradox/houdini/lights/hue-main
 host        = 192.168.1.100
 api_key     = your-hue-app-key
 hue_profile = color
+hue_target_type = all
 brightness  = 80
+```
+
+Optional Hue targeting keys:
+
+- `hue_target_type = all|group|light`
+- `hue_target_id = <Hue numeric id>` when `hue_target_type` is `group` or `light`
+
+Examples:
+
+```ini
+[light:hue-room]
+backend         = hue
+topic           = paradox/houdini/lights/hue-room
+host            = 192.168.1.100
+api_key         = your-hue-app-key
+hue_target_type = group
+hue_target_id   = 7
+
+[light:hue-desk]
+backend         = hue
+topic           = paradox/houdini/lights/hue-desk
+host            = 192.168.1.100
+api_key         = your-hue-app-key
+hue_target_type = light
+hue_target_id   = 3
 ```
 
 `hue_profile` modes:
@@ -133,5 +156,5 @@ scene_map   = {"cyan":{"on":true,"r":0,"g":210,"b":255,"brightness":72}}
 | Symptom | Check |
 |---------|-------|
 | `HUE_INIT_FAILED` | Verify `host` and `api_key` by calling `http://<bridge>/api/<key>/lights` manually |
-| Commands work but affect more lights than expected | Current PxB Hue path targets the bridge all-lights group |
+| Commands work but affect more lights than expected | Check `hue_target_type` and `hue_target_id`; `all` targets the bridge-wide all-lights action |
 | `HUE_CMD_LIMITATION` | `fade` currently applies an immediate brightness change; timed fades are not implemented |

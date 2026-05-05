@@ -26,6 +26,16 @@ describe('HueAdapter', () => {
         };
     });
 
+    afterEach(async () => {
+        if (adapter && !adapter._disposed) {
+            await adapter.dispose();
+        }
+
+        jest.clearAllTimers();
+        jest.useRealTimers();
+        jest.restoreAllMocks();
+    });
+
     describe('constructor', () => {
         it('should construct with valid config', () => {
             const config = {
@@ -40,8 +50,116 @@ describe('HueAdapter', () => {
             expect(adapter.port).toBe(80); // default
             expect(adapter.apiKey).toBe('test-key-123');
             expect(adapter.brightness).toBe(100); // default
+                expect(adapter.targetType).toBe('all');
+                expect(adapter.targetId).toBeNull();
         });
 
+            it('should accept a configured Hue group target', () => {
+                const config = {
+                    topic: 'paradox/houdini/lights/mirror',
+                    host: '192.168.1.100',
+                    api_key: 'test-key',
+                    hue_target_type: 'group',
+                    hue_target_id: '7',
+                };
+
+                adapter = new HueAdapter({ config, mqttClient: mockMqtt, logger: mockLogger });
+
+                expect(adapter.targetType).toBe('group');
+                expect(adapter.targetId).toBe('7');
+            });
+
+            it('should reject an invalid target type', () => {
+                const config = {
+                    topic: 'paradox/houdini/lights/mirror',
+                    host: '192.168.1.100',
+                    api_key: 'test-key',
+                    hue_target_type: 'room',
+                };
+
+                expect(() => {
+                    new HueAdapter({ config, mqttClient: mockMqtt, logger: mockLogger });
+                }).toThrow(/hue_target_type must be one of all, group, light/);
+            });
+
+            it('should reject a missing target id for light targets', () => {
+                const config = {
+                    topic: 'paradox/houdini/lights/mirror',
+                    host: '192.168.1.100',
+                    api_key: 'test-key',
+                    hue_target_type: 'light',
+                };
+
+                expect(() => {
+                    new HueAdapter({ config, mqttClient: mockMqtt, logger: mockLogger });
+                }).toThrow(/hue_target_id required for light target/);
+            });
+
+            it('should resolve action URLs from the configured target', () => {
+                adapter = new HueAdapter({
+                    config: {
+                        topic: 'paradox/houdini/lights/mirror',
+                        host: '192.168.1.100',
+                        api_key: 'test-key',
+                        hue_target_type: 'group',
+                        hue_target_id: '7',
+                    },
+                    mqttClient: mockMqtt,
+                    logger: mockLogger,
+                });
+
+                expect(adapter._getActionUrl()).toBe('http://192.168.1.100:80/api/test-key/groups/7/action');
+            });
+
+
+        describe('_fetchLights', () => {
+            it('should fetch a single configured light when target_type=light', async () => {
+                adapter = new HueAdapter({
+                    config: {
+                        topic: 'paradox/houdini/lights/mirror',
+                        host: '192.168.1.100',
+                        api_key: 'test-key',
+                        hue_target_type: 'light',
+                        hue_target_id: '3',
+                    },
+                    mqttClient: mockMqtt,
+                    logger: mockLogger,
+                });
+
+                jest.spyOn(adapter, '_httpGet').mockResolvedValue({ state: { on: true, bri: 200 } });
+
+                await expect(adapter._fetchLights()).resolves.toEqual({
+                    3: { state: { on: true, bri: 200 } },
+                });
+            });
+
+            it('should scope fetched lights to the configured group', async () => {
+                adapter = new HueAdapter({
+                    config: {
+                        topic: 'paradox/houdini/lights/mirror',
+                        host: '192.168.1.100',
+                        api_key: 'test-key',
+                        hue_target_type: 'group',
+                        hue_target_id: '7',
+                    },
+                    mqttClient: mockMqtt,
+                    logger: mockLogger,
+                });
+
+                jest.spyOn(adapter, '_httpGet')
+                    .mockResolvedValueOnce({ lights: ['1', '3'] })
+                    .mockResolvedValueOnce({
+                        1: { state: { on: true } },
+                        2: { state: { on: false } },
+                        3: { state: { on: true } },
+                    });
+
+                await expect(adapter._fetchLights()).resolves.toEqual({
+                    1: { state: { on: true } },
+                    3: { state: { on: true } },
+                });
+            });
+        });
         it('should use custom port if provided', () => {
             const config = {
                 topic: 'paradox/houdini/lights/mirror',
@@ -342,6 +460,38 @@ describe('HueAdapter', () => {
             expect(adapter._httpPut).toHaveBeenCalledWith(
                 expect.stringContaining('/lights/1/state'),
                 expect.objectContaining({ on: true, bri: 200 })
+            );
+        });
+
+        it('should use the configured target light when lightId is omitted', async () => {
+            await adapter.dispose();
+
+            adapter = new HueAdapter({
+                config: {
+                    topic: 'paradox/houdini/lights/mirror',
+                    host: '192.168.1.100',
+                    api_key: 'test-key',
+                    hue_target_type: 'light',
+                    hue_target_id: '3',
+                },
+                mqttClient: mockMqtt,
+                logger: mockLogger,
+            });
+
+            jest.spyOn(adapter, '_fetchLights').mockResolvedValue({
+                3: { state: { on: false, bri: 100 } },
+            });
+            jest.spyOn(adapter, '_httpPut').mockResolvedValue([{ success: { '/lights/3/state/on': true } }]);
+            jest.spyOn(adapter, '_pollState').mockResolvedValue();
+
+            await adapter.init();
+            mockMqtt.publish.mockClear();
+
+            await adapter._setLight({ on: true });
+
+            expect(adapter._httpPut).toHaveBeenCalledWith(
+                expect.stringContaining('/lights/3/state'),
+                expect.objectContaining({ on: true })
             );
         });
 

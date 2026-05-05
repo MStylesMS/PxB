@@ -154,6 +154,8 @@ Light device sections are used for direct network/cloud light backends (`hue`, `
 | `port` | int | no | backend default | Optional per-backend port override |
 | `brightness` | int | no | `100` | Default brightness level |
 | `hue_profile` | string | no | `color` | Hue rendering mode: `color`, `ct`, or `dim` |
+| `hue_target_type` | string | no | `all` | Hue target selector: `all`, `group`, or `light` |
+| `hue_target_id` | string | with `group`/`light` | — | Hue group id or light id for scoped targeting |
 | `scene_map` | string(JSON) | no | built-in defaults | Per-backend scene overrides keyed by scene name |
 | `timeout_s` | int | no | `10` | Request timeout |
 
@@ -165,5 +167,45 @@ backend = hue
 topic = paradox/houdini/lights
 host = 192.168.1.40
 api_key = <hue-app-key>
+hue_target_type = group
+hue_target_id = 7
 scene_map = {"cyan":{"on":true,"r":0,"g":210,"b":255,"brightness":72}}
 ```
+
+`hue_target_type = all` targets the bridge-wide all-lights action. Use
+`group` or `light` with `hue_target_id` to scope the adapter to a Hue room/zone
+group or a single Hue light.
+
+## `[light-zone:<label>]`
+
+Light zones are generic fan-out groups built from named `[light:*]` members.
+
+| Key | Type | Required | Default | Description |
+|-----|------|:--------:|---------|-------------|
+| `topic` | string | yes | — | Zone topic root for `{commands,state,warnings,events}` |
+| `devices` | csv | yes | — | Comma-separated list of `[light:*]` labels |
+
+Example:
+
+```ini
+[light:hue-room]
+backend = hue
+topic = paradox/houdini/lights/hue-room
+host = 192.168.1.40
+api_key = <hue-app-key>
+hue_target_type = group
+hue_target_id = 7
+
+[light:wiz-desk]
+backend = wiz
+topic = paradox/houdini/lights/wiz-desk
+host = 10.0.0.84
+
+[light-zone:stage]
+topic = paradox/houdini/lights/stage
+devices = hue-room,wiz-desk
+```
+
+Light zones may mix vendors. PxB fans commands out to each member adapter and
+expects each backend to apply the parts it supports while publishing warnings for
+unsupported requests.

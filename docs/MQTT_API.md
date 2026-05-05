@@ -221,6 +221,11 @@ For configured light backends (`hue`, `wiz`, `lifx`), PxB accepts light-zone com
 Built-in scene names are aligned across Hue/WiZ/LIFX and can be tuned per backend with `scene_map` in INI:
 - `normal`, `dim`, `red`, `blue`, `green`, `yellow`, `orange`, `purple`, `pink`, `cyan`, `magenta`, `white`, `softWhite`, `brightWhite`, `warmWhite`, `coolWhite`, `off`
 
+`[light-zone:*]` topics use the same command payloads. Zones are backend-agnostic:
+PxB fans a command out to each member light adapter, and each adapter should apply
+the supported parts of the request while publishing warnings when the request asks
+for a capability that backend cannot satisfy.
+
 ## 10. Per-Node Warnings (`{node.base_topic}/warnings`)
 
 Not retained. Same shape as bridge warnings.

@@ -289,6 +289,8 @@ backend = hue
 topic = paradox/test/lights/hue-main
 host = 192.168.1.5
 api_key = abc123
+hue_target_type = group
+hue_target_id = 7
 
 [light-zone:lights]
 topic = paradox/test/lights
@@ -298,7 +300,46 @@ devices = wiz-201,hue-main
     const cfg = loadConfig(f);
     expect(cfg.lights['wiz-201'].backend).toBe('wiz');
     expect(cfg.lights['hue-main'].backend).toBe('hue');
+    expect(cfg.lights['hue-main'].hue_target_type).toBe('group');
+    expect(cfg.lights['hue-main'].hue_target_id).toBe('7');
     expect(cfg.light_zones.lights.devices).toEqual(['wiz-201', 'hue-main']);
+  });
+
+  test('validates Hue target config shape', () => {
+    const f = writeTempIni(`
+[mqtt]
+broker = localhost
+client_id = test
+base_topic = paradox/test
+
+[light:hue-main]
+backend = hue
+topic = paradox/test/lights/hue-main
+host = 192.168.1.5
+api_key = abc123
+hue_target_type = light
+`);
+
+    expect(() => loadConfig(f)).toThrow('hue_target_type=light requires "hue_target_id"');
+  });
+
+  test('rejects Hue target id when target type is all', () => {
+    const f = writeTempIni(`
+[mqtt]
+broker = localhost
+client_id = test
+base_topic = paradox/test
+
+[light:hue-main]
+backend = hue
+topic = paradox/test/lights/hue-main
+host = 192.168.1.5
+api_key = abc123
+hue_target_type = all
+hue_target_id = 7
+`);
+
+    expect(() => loadConfig(f)).toThrow('hue_target_id is only valid when hue_target_type is "group" or "light"');
   });
 
   test('validates light-zone devices reference existing lights', () => {

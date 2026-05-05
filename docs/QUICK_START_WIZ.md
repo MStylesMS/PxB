@@ -8,6 +8,8 @@ This guide covers the direct WiZ LAN backend in PxB.
 - Each light section targets one WiZ bulb IP.
 - For grouped control, define multiple `[light:*]` sections and fan out through a
   `[light-zone:*]` section.
+- `[light-zone:*]` is generic, so WiZ bulbs can share a group with Hue or LIFX
+  devices when that is useful for the room design.
 
 ## 1. Add PxB Config Sections
 
@@ -97,8 +99,8 @@ scene_map = {"normal":{"state":true,"temp":4000,"dimming":70},"off":{"state":fal
 
 - WiZ `fade` is accepted, but duration is not native to the protocol. PxB applies
   the target level immediately and publishes a limitation warning.
-- The old PFx `bulb_ips = ...` fallback group shortcut is not available in PxB.
-  Use named member devices plus `[light-zone:*]`.
+- Grouping stays generic in PxB. Use named member devices plus `[light-zone:*]`
+  instead of adding a WiZ-specific grouping mechanism.
 
 ## 7. Troubleshooting
 

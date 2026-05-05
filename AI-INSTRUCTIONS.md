@@ -38,6 +38,9 @@ PxB is one of seven Paradox products. It is designed to **replace direct radio h
 - **Event payload must match the PFx InputZone contract**: `{input, event, source: "zwave-node-<n>"|"zigbee-<ieee>", ts, raw}`
 - **Single-writer to radio**: PxB is the only process that opens the radio serial port. PFx direct-radio backends must be retired as PxB comes online.
 - **Discovered-but-unconfigured nodes** get a generated INI fragment with placeholders — PxB does not silently start publishing under a guessed topic without operator confirmation (except under a clearly marked `discovered/` prefix).
+- **Generic light zones stay generic**: mixed-vendor `[light-zone:*]` groups are allowed. Do not add vendor-specific grouping layers unless the hardware contract truly requires them.
+- **Best-effort light capability handling**: adapters should apply the parts of a light command they support and publish a warning when asked for an unsupported capability. Do not block mixed-vendor grouping on cross-backend normalization work.
+- **Do not leave dormant feature scaffolding**: if passthrough routing or aggregator behavior is not shipping, remove the dead code/docs instead of parking half-wired abstractions in the repo.
 
 ## Documentation-First Development
 

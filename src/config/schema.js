@@ -65,6 +65,8 @@ const SCHEMA = {
         port: { required: false, type: 'int' },
         brightness: { required: false, type: 'int', default: 100 },
         hue_profile: { required: false, type: 'string' },
+        hue_target_type: { required: false, type: 'string', default: 'all' },
+        hue_target_id: { required: false, type: 'string' },
         scene_map: { required: false, type: 'string' },
         timeout_s: { required: false, type: 'int', default: 10 },
     },
@@ -82,24 +84,23 @@ const SCHEMA = {
         port: { required: false, type: 'int' },
         timeout_s: { required: false, type: 'int', default: 10 },
     },
-    'inputs:*': {
-        // Inputs zones follow pattern [inputs:zone_name]
-        // Aggregates sensor inputs (contact, motion, etc.)
-        topic: { required: true, type: 'string' },
-        filter_duplicates_ms: { required: false, type: 'int', default: 100 },
-    },
-    'outputs:*': {
-        // Outputs zones follow pattern [outputs:zone_name]
-        // Generic output aggregator for relays, GPIO, etc.
-        topic: { required: true, type: 'string' },
-    },
 };
 
 const VALID_NODE_LABEL = /^[a-z0-9][a-z0-9-]*$/;
 const VALID_RADIOS = new Set(['zwave', 'zigbee']);
 const VALID_TYPES = new Set(['contact', 'relay', 'switch', 'motion', 'custom']);
 const VALID_LIGHT_BACKENDS = new Set(['hue', 'lifx', 'wiz']);
+const VALID_HUE_TARGET_TYPES = new Set(['all', 'group', 'light']);
 const VALID_SWITCH_BACKENDS = new Set(['shelly']);
-const VALID_ZONE_TYPES = new Set(['lights', 'switches', 'inputs', 'outputs']);
+const VALID_ZONE_TYPES = new Set(['lights', 'switches']);
 
-module.exports = { SCHEMA, VALID_NODE_LABEL, VALID_RADIOS, VALID_TYPES, VALID_LIGHT_BACKENDS, VALID_SWITCH_BACKENDS, VALID_ZONE_TYPES };
+module.exports = {
+    SCHEMA,
+    VALID_NODE_LABEL,
+    VALID_RADIOS,
+    VALID_TYPES,
+    VALID_LIGHT_BACKENDS,
+    VALID_HUE_TARGET_TYPES,
+    VALID_SWITCH_BACKENDS,
+    VALID_ZONE_TYPES,
+};

@@ -325,12 +325,10 @@ async function main() {
         }
     }
 
-    // --- Domain adapters (lights, switches, inputs, outputs) ---
+    // --- Domain adapters (lights, switches) ---
     const domainAdapters = {
         lights: new Map(),      // label -> adapter instance
         switches: new Map(),    // label -> adapter instance
-        inputs: new Map(),      // Input aggregator zone → InputsAdapter
-        outputs: new Map(),     // Output aggregator zone → OutputsAdapter
     };
 
     const publishAdapterInitWarning = (topic, label, message) => {
@@ -474,12 +472,6 @@ async function main() {
                 try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
             }
             for (const [, adapter] of domainAdapters.switches) {
-                try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
-            }
-            for (const [, adapter] of domainAdapters.inputs) {
-                try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
-            }
-            for (const [, adapter] of domainAdapters.outputs) {
                 try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
             }
         } catch (err) {

@@ -1,6 +1,6 @@
 # PxB I/O Domain Adapters
 
-This directory contains all I/O domain adapter implementations (lights, switches, inputs, outputs). Adapters are instantiated at startup based on the INI configuration and manage communication with external hardware backends.
+This directory contains the active PxB domain adapter implementations. Adapters are instantiated at startup based on the INI configuration and manage communication with external hardware backends.
 
 ## Adapter Domains
 
@@ -8,43 +8,33 @@ This directory contains all I/O domain adapter implementations (lights, switches
 - **Hue** (`hue.js`) — Philips Hue light control
 - **LIFX** (`lifx.js`) — LIFX smart light control
 - **WiZ** (`wiz.js`) — WiZ light control
+- **LightZoneAdapter** (`zone.js`) — Fan-out adapter for grouped light devices
 
 **INI Configuration:**
 ```ini
-[lights:zone_name]
+[light:device_name]
 backend = hue|lifx|wiz
-topic = paradox/houdini/lights/zone_name
+topic = paradox/houdini/lights/device_name
 ...backend-specific keys
+
+[light-zone:room_name]
+topic = paradox/houdini/lights/room_name
+devices = hue-main,wiz-84,lifx-desk
 ```
+
+`[light-zone:*]` is backend-agnostic. A zone can mix Hue, WiZ, and LIFX members.
+Commands are fanned out member-by-member, and each backend is expected to apply the
+parts it supports while publishing warnings for unsupported requests.
 
 ### `src/switches/` — Smart Switch Adapters
 - **Shelly** (`shelly.js`) — Shelly smart switches and relays
 
 **INI Configuration:**
 ```ini
-[switches:zone_name]
+[switch:switch_name]
 backend = shelly
-topic = paradox/houdini/switches/zone_name
+topic = paradox/houdini/switches/switch_name
 ...backend-specific keys
-```
-
-### `src/inputs/` — Input Aggregators
-- **InputsAdapter** (`aggregator.js`) — Collects sensor inputs from radio nodes and publishes aggregated state
-
-**INI Configuration:**
-```ini
-[inputs:zone_name]
-topic = paradox/houdini/inputs/zone_name
-filter_duplicates_ms = 100
-```
-
-### `src/outputs/` — Output Aggregators
-- **OutputsAdapter** (`aggregator.js`) — Routes output commands to hardware (relays, GPIO, etc.)
-
-**INI Configuration:**
-```ini
-[outputs:zone_name]
-topic = paradox/houdini/outputs/zone_name
 ```
 
 ## Adapter Contract
@@ -100,7 +90,7 @@ describe('HueAdapter', () => {
 
 Adapters are loaded and managed in `src/index.js`:
 
-1. **Config parsing:** INI sections named `[lights:*]`, `[switches:*]`, etc. are extracted
+1. **Config parsing:** INI sections named `[light:*]`, `[light-zone:*]`, `[switch:*]`, etc. are extracted
 2. **Instantiation:** Adapters are constructed with shared MQTT client and logger
 3. **Lifecycle:** `init()` called after MQTT connects; `dispose()` called on shutdown
 4. **MQTT wiring:** Command handler subscribes to `{topic}/commands` and routes to `executeCommand()`
@@ -116,19 +106,13 @@ Domain adapters do **not** directly interact with radios (Z-Wave/Zigbee). Radio 
 
 ## Status
 
-**R2 Scaffold (in progress):**
+**Current scope:**
 - ✅ Directory structure created
 - ✅ AdapterBase contract defined
-- ✅ Config schema extended (lights, switches, inputs, outputs)
+- ✅ Config schema extended for lights, light zones, and switches
 - ✅ Adapter loading hooks added to src/index.js
 - ✅ Test scaffold created
-- ⏳ Individual adapters (R3–R4) — not yet implemented
+- ✅ Active adapters implemented for Hue, WiZ, LIFX, Shelly, and grouped light zones
 
-**R3 Parallel Work (cloud agents):**
-- HueAdapter implementation
-- LifxAdapter implementation
-- WizAdapter implementation
-
-**R4 Sequential Work:**
-- ShellyAdapter implementation
-- InputsAdapter + OutputsAdapter implementation
+Radio-node aggregation belongs in PxO EDN or direct MQTT composition, not dormant
+scaffolding inside PxB.

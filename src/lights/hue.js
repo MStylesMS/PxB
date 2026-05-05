@@ -64,6 +64,8 @@ class HueAdapter extends AdapterBase {
         this.apiKey = config.api_key;
         this.brightness = config.brightness || 100;
         this.profile = (config.hue_profile || config.hueProfile || 'color').toLowerCase();
+        this.targetType = String(config.hue_target_type || 'all').toLowerCase();
+        this.targetId = config.hue_target_id ? String(config.hue_target_id) : null;
         this.timeoutMs = (config.timeout_s || 10) * 1000;
         this.sceneMap = {
             ...HUE_COLOR_SCENES,
@@ -72,6 +74,18 @@ class HueAdapter extends AdapterBase {
 
         if (!this.host || !this.apiKey) {
             throw new Error('HueAdapter: config.host and config.api_key required');
+        }
+
+        if (!new Set(['all', 'group', 'light']).has(this.targetType)) {
+            throw new Error('HueAdapter: config.hue_target_type must be one of all, group, light');
+        }
+
+        if (this.targetType === 'all' && this.targetId) {
+            throw new Error('HueAdapter: config.hue_target_id is only valid for group or light targets');
+        }
+
+        if (this.targetType !== 'all' && !this.targetId) {
+            throw new Error(`HueAdapter: config.hue_target_id required for ${this.targetType} target`);
         }
 
         this.lights = new Map();     // light_id → { state, reachable, ... }
@@ -94,7 +108,7 @@ class HueAdapter extends AdapterBase {
             for (const [lightId, lightState] of Object.entries(lights)) {
                 this.lights.set(lightId, lightState);
             }
-            this.logger.info(`HueAdapter: Found ${lights.length} lights`);
+            this.logger.info(`HueAdapter: Found ${Object.keys(lights).length} lights for ${this._describeTarget()}`);
         } catch (err) {
             this.publishWarning('HUE_INIT_FAILED', `Failed to fetch lights: ${err.message}`);
             throw err;
@@ -208,9 +222,11 @@ class HueAdapter extends AdapterBase {
 
         if (this._subscribed) {
             const commandTopic = `${this.config.topic}/commands`;
-            this.mqttClient.unsubscribe(commandTopic).catch((err) => {
+            try {
+                await this.mqttClient.unsubscribe(commandTopic);
+            } catch (err) {
                 this.logger.warn(`HueAdapter: Unsubscribe error: ${err.message}`);
-            });
+            }
             this._subscribed = false;
         }
 
@@ -224,9 +240,26 @@ class HueAdapter extends AdapterBase {
      * Fetch all lights from Hue Bridge.
      */
     async _fetchLights() {
-        const url = `http://${this.host}:${this.port}/api/${this.apiKey}/lights`;
-        const response = await this._httpGet(url);
-        return response;
+        if (this.targetType === 'light') {
+            const response = await this._httpGet(this._getLightsUrl(this.targetId));
+            return { [this.targetId]: response };
+        }
+
+        if (this.targetType === 'group') {
+            const [group, allLights] = await Promise.all([
+                this._httpGet(this._getGroupsUrl(this.targetId)),
+                this._httpGet(this._getLightsUrl()),
+            ]);
+            const scopedLights = {};
+            for (const lightId of group?.lights || []) {
+                if (allLights[lightId]) {
+                    scopedLights[lightId] = allLights[lightId];
+                }
+            }
+            return scopedLights;
+        }
+
+        return this._httpGet(this._getLightsUrl());
     }
 
     /**
@@ -235,9 +268,10 @@ class HueAdapter extends AdapterBase {
      */
     async _setLight(payload) {
         const { lightId, on, brightness, hue, sat, ct, transitiontime } = payload;
+        const resolvedLightId = lightId || (this.targetType === 'light' ? this.targetId : null);
 
-        if (!lightId) {
-            this.publishWarning('HUE_SETLIGHT_MISSING_ID', 'lightId is required');
+        if (!resolvedLightId) {
+            this.publishWarning('HUE_SETLIGHT_MISSING_ID', 'lightId is required unless the adapter targets a single configured light');
             return;
         }
 
@@ -249,13 +283,13 @@ class HueAdapter extends AdapterBase {
         if (ct !== undefined) state.ct = ct;
         if (transitiontime !== undefined) state.transitiontime = transitiontime;
 
-        const url = `http://${this.host}:${this.port}/api/${this.apiKey}/lights/${lightId}/state`;
+        const url = this._getLightStateUrl(resolvedLightId);
         const response = await this._httpPut(url, state);
 
         // Verify success
         if (response && Array.isArray(response) && response[0].success) {
-            this.publishEvent('light-updated', { lightId, state });
-            this.logger.info(`HueAdapter: Light ${lightId} updated`);
+            this.publishEvent('light-updated', { lightId: resolvedLightId, state });
+            this.logger.info(`HueAdapter: Light ${resolvedLightId} updated`);
             // Refresh state
             await this._pollState();
         } else {
@@ -275,11 +309,14 @@ class HueAdapter extends AdapterBase {
             return;
         }
 
-        // Hue scene recall is typically via /groups/0/action endpoint
+        if (this.targetType === 'light') {
+            throw new Error('Hue sceneId recall is only supported for all-lights or group targets');
+        }
+
         const state = { scene: sceneId };
         if (transition) state.transition = transition;
 
-        const url = `http://${this.host}:${this.port}/api/${this.apiKey}/groups/0/action`;
+        const url = this._getActionUrl();
         const response = await this._httpPut(url, state);
 
         if (response && Array.isArray(response) && response[0].success) {
@@ -297,7 +334,7 @@ class HueAdapter extends AdapterBase {
             ?? this.sceneMap[Object.keys(this.sceneMap).find((k) => k.toLowerCase() === sceneName.toLowerCase())];
         if (!scene) { this.publishWarning('HUE_SCENE_UNKNOWN', `Unknown scene '${sceneName}'`); return; }
 
-        const url = `http://${this.host}:${this.port}/api/${this.apiKey}/groups/0/action`;
+        const url = this._getActionUrl();
         if (!scene.on) {
             await this._httpPut(url, { on: false });
             this.publishEvent('scene-activated', { scene: sceneName });
@@ -317,7 +354,7 @@ class HueAdapter extends AdapterBase {
         if (payload.brightness !== undefined) {
             state.bri = this._pctToHueBri(this._clampBrightness(payload.brightness));
         }
-        const url = `http://${this.host}:${this.port}/api/${this.apiKey}/groups/0/action`;
+        const url = this._getActionUrl();
         const response = await this._httpPut(url, state);
         if (response && Array.isArray(response) && response[0].success) {
             this.publishEvent('all-on');
@@ -328,7 +365,7 @@ class HueAdapter extends AdapterBase {
     }
 
     async _turnOff() {
-        const url = `http://${this.host}:${this.port}/api/${this.apiKey}/groups/0/action`;
+        const url = this._getActionUrl();
         const response = await this._httpPut(url, { on: false });
         if (response && Array.isArray(response) && response[0].success) {
             this.publishEvent('all-off');
@@ -344,7 +381,7 @@ class HueAdapter extends AdapterBase {
             on: briPct > 0,
             bri: this._pctToHueBri(briPct),
         };
-        const url = `http://${this.host}:${this.port}/api/${this.apiKey}/groups/0/action`;
+        const url = this._getActionUrl();
         const response = await this._httpPut(url, state);
         if (response && Array.isArray(response) && response[0].success) {
             this.publishEvent('brightness-updated', { brightness: briPct });
@@ -357,7 +394,7 @@ class HueAdapter extends AdapterBase {
     async _setColor(payload) {
         const rgb = this._parseColor(payload.color);
         const state = this._buildColorState(rgb.r, rgb.g, rgb.b, payload.brightness ?? 100);
-        const url = `http://${this.host}:${this.port}/api/${this.apiKey}/groups/0/action`;
+        const url = this._getActionUrl();
         const response = await this._httpPut(url, state);
         if (response && Array.isArray(response) && response[0].success) {
             this.publishEvent('color-updated', { color: payload.color });
@@ -382,7 +419,7 @@ class HueAdapter extends AdapterBase {
             state.xy = [xy.x, xy.y];
         }
 
-        const url = `http://${this.host}:${this.port}/api/${this.apiKey}/groups/0/action`;
+        const url = this._getActionUrl();
         const response = await this._httpPut(url, state);
         if (response && Array.isArray(response) && response[0].success) {
             this.publishEvent('color-temperature-updated', { kelvin });
@@ -455,7 +492,7 @@ class HueAdapter extends AdapterBase {
      * Turn all lights on.
      */
     async _allOn() {
-        const url = `http://${this.host}:${this.port}/api/${this.apiKey}/groups/0/action`;
+        const url = this._getActionUrl();
         const response = await this._httpPut(url, { on: true });
 
         if (response && Array.isArray(response) && response[0].success) {
@@ -470,7 +507,7 @@ class HueAdapter extends AdapterBase {
      * Turn all lights off.
      */
     async _allOff() {
-        const url = `http://${this.host}:${this.port}/api/${this.apiKey}/groups/0/action`;
+        const url = this._getActionUrl();
         const response = await this._httpPut(url, { on: false });
 
         if (response && Array.isArray(response) && response[0].success) {
@@ -551,6 +588,40 @@ class HueAdapter extends AdapterBase {
             this.logger.warn(`HueAdapter: Failed to parse scene_map JSON: ${err.message}`);
             return {};
         }
+    }
+
+    _getApiRoot() {
+        return `http://${this.host}:${this.port}/api/${this.apiKey}`;
+    }
+
+    _getLightsUrl(lightId = null) {
+        return lightId
+            ? `${this._getApiRoot()}/lights/${lightId}`
+            : `${this._getApiRoot()}/lights`;
+    }
+
+    _getGroupsUrl(groupId = null) {
+        return groupId
+            ? `${this._getApiRoot()}/groups/${groupId}`
+            : `${this._getApiRoot()}/groups`;
+    }
+
+    _getLightStateUrl(lightId) {
+        return `${this._getApiRoot()}/lights/${lightId}/state`;
+    }
+
+    _getActionUrl() {
+        if (this.targetType === 'light') {
+            return this._getLightStateUrl(this.targetId);
+        }
+
+        const groupId = this.targetType === 'group' ? this.targetId : '0';
+        return `${this._getApiRoot()}/groups/${groupId}/action`;
+    }
+
+    _describeTarget() {
+        if (this.targetType === 'all') return 'all lights';
+        return `${this.targetType} ${this.targetId}`;
     }
 
     _pctToHueBri(value) {

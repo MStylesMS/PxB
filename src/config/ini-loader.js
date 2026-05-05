@@ -9,6 +9,7 @@ const {
     VALID_RADIOS,
     VALID_TYPES,
     VALID_LIGHT_BACKENDS,
+    VALID_HUE_TARGET_TYPES,
     VALID_SWITCH_BACKENDS,
 } = require('./schema');
 
@@ -239,6 +240,25 @@ function loadConfig(configPath) {
 
         if (light.backend === 'hue' && (!light.host || !light.api_key)) {
             errors.push(`[${sectionKey}] backend=hue requires "host" and "api_key"`);
+        }
+
+        if (light.backend === 'hue') {
+            const targetType = String(light.hue_target_type || 'all').toLowerCase();
+            light.hue_target_type = targetType;
+
+            if (!VALID_HUE_TARGET_TYPES.has(targetType)) {
+                errors.push(
+                    `[${sectionKey}] hue_target_type "${targetType}" is invalid — expected: ${[...VALID_HUE_TARGET_TYPES].join(', ')}`
+                );
+            }
+
+            if (targetType === 'all' && light.hue_target_id) {
+                errors.push(`[${sectionKey}] hue_target_id is only valid when hue_target_type is "group" or "light"`);
+            }
+
+            if (targetType !== 'all' && !light.hue_target_id) {
+                errors.push(`[${sectionKey}] hue_target_type=${targetType} requires "hue_target_id"`);
+            }
         }
 
         if (light.backend === 'wiz' && !light.host) {
