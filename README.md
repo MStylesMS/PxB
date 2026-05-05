@@ -2,6 +2,17 @@
 
 PxB is a **simple, focused Z-Wave / Zigbee / Thread to MQTT bridge** for the Paradox escape-room platform. It owns the radio(s) on a Linux host, publishes device events and state over MQTT in the Paradox topic contract, and accepts pairing and output commands via MQTT or CLI.
 
+## Why This Repo Is Worth Reviewing
+
+PxB is a compact systems-integration project rather than a toy app. It combines:
+
+- asynchronous Node.js service orchestration
+- explicit MQTT API design and retained-state contracts
+- hardware-facing driver lifecycle management with reconnect behavior
+- configuration-driven runtime composition
+- direct device adapters plus grouped light fan-out semantics
+- a broad unit test surface over bridge, adapter, contract, and discovery logic
+
 ## What It Does
 
 - Connects to Z-Wave and Zigbee USB radios; Zigbee is targeted at Sonoff EFR32MG21 coordinators (Dongle-LMG21 class) on the Ember adapter path.
@@ -22,12 +33,19 @@ PFx was evolving toward direct Z-Wave and Zigbee ownership. That coupled the rad
 
 | Document | Purpose |
 |----------|---------|
+| [docs/TECHNICAL_SUMMARY.md](docs/TECHNICAL_SUMMARY.md) | Short reviewer-oriented summary of the architecture, implementation areas, and current status |
 | [docs/SPEC.md](docs/SPEC.md) | Functional specification |
 | [docs/MQTT_API.md](docs/MQTT_API.md) | MQTT topic/message contract |
 | [docs/CONFIG_INI.md](docs/CONFIG_INI.md) | INI configuration reference |
 | [docs/QUICK_START.md](docs/QUICK_START.md) | Install and first-run guide |
 | [docs/Scaffold_Summary.md](docs/Scaffold_Summary.md) | Initial repo layout and what each file is for |
 | [docs/PR_PZB_INITIAL.md](docs/PR_PZB_INITIAL.md) | Phased implementation plan with model-routing tags |
+
+## Current Validation Snapshot
+
+- ESLint 9 flat-config lint gate is wired and passing
+- Unit suite is green across bridge, driver, contract, discovery, and adapter coverage
+- Remaining uncertainty is concentrated in live hardware validation for specific coordinator/device combinations, not in missing local tooling or a broken test harness
 
 ## Paradox Family
 
