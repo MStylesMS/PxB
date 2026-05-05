@@ -116,7 +116,7 @@ class ZigbeeEvents {
         }, { retain: false });
     }
 
-    _onMessage({ ieee, cluster, type, data, endpointId }) {
+    _onMessage({ ieee, cluster, type, data, endpointId: _endpointId }) {
         const entry = this._registry.getByIeee(ieee);
         if (!entry) {
             logger.debug(`Zigbee msg ${ieee} cluster=${cluster} type=${type} (unconfigured)`);

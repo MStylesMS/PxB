@@ -63,7 +63,7 @@ class AdapterBase {
      * On non-fatal error: publish to {topic}/warnings and return normally.
      * On fatal error: publish warning and throw; caller will mark adapter failed.
      */
-    async executeCommand(payload) {
+    async executeCommand(_payload) {
         throw new Error(`${this.name}.executeCommand() not implemented`);
     }
 
@@ -74,7 +74,7 @@ class AdapterBase {
      * @param {object} state - Node state object (shape varies by adapter type)
      * @returns {void}
      */
-    handleStateUpdate(state) {
+    handleStateUpdate(_state) {
         throw new Error(`${this.name}.handleStateUpdate() not implemented`);
     }
 

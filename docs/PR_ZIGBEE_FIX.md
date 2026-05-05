@@ -2,7 +2,7 @@
 
 ## Summary
 
-Zigbee support in PZB is **code-complete and test-complete (143/143 tests passing)**, but live pairing against the **HUSBZB-1 (Silicon Labs EFR32, EmberZNet 5.4.1.0, EZSP protocol v5, ~2015 firmware)** cannot be made reliable. After four compatibility patches to `zigbee-herdsman@3.5.2` — two `clearTransientLinkKeys` try/catch guards, one `addTransientLinkKey` try/catch guard, and an EZSP v5 fallback that sets `TRUST_CENTER_POLICY = SEND_KEY_IN_THE_CLEAR` — joined end devices still enter a permanent `UNSECURED_REJOIN` loop. Verbose captures show `trustCenterJoinHandler` firing with `policyDecision:0` (USE_PRECONFIGURED_KEY) on every rejoin despite the policy being accepted by the chip (`setPolicy` returns `status:0`); the firmware simply does not honor the TC policy for unsecured rejoins in EZSP v5, and `ember_security()` in herdsman compounds the issue by seeding `preconfiguredKey` with `randomBytes(16)` instead of the well-known `ZigBeeAlliance09` TC link key. The sensor's short address churns every ~5 s, every `NODE_DESCRIPTOR_REQUEST` targets a stale nwkAddr (delivery status 102), and the interview never advances past `epList:[]`. No user-accessible firmware upgrade path exists for the HUSBZB-1 Zigbee side. **Recommendation: pause Zigbee development and replace the coordinator.** The HUSBZB-1 Z-Wave side (`if00`) remains fully functional and is unaffected.
+Zigbee support in PxB is **code-complete and test-complete (143/143 tests passing)**, but live pairing against the **HUSBZB-1 (Silicon Labs EFR32, EmberZNet 5.4.1.0, EZSP protocol v5, ~2015 firmware)** cannot be made reliable. After four compatibility patches to `zigbee-herdsman@3.5.2` — two `clearTransientLinkKeys` try/catch guards, one `addTransientLinkKey` try/catch guard, and an EZSP v5 fallback that sets `TRUST_CENTER_POLICY = SEND_KEY_IN_THE_CLEAR` — joined end devices still enter a permanent `UNSECURED_REJOIN` loop. Verbose captures show `trustCenterJoinHandler` firing with `policyDecision:0` (USE_PRECONFIGURED_KEY) on every rejoin despite the policy being accepted by the chip (`setPolicy` returns `status:0`); the firmware simply does not honor the TC policy for unsecured rejoins in EZSP v5, and `ember_security()` in herdsman compounds the issue by seeding `preconfiguredKey` with `randomBytes(16)` instead of the well-known `ZigBeeAlliance09` TC link key. The sensor's short address churns every ~5 s, every `NODE_DESCRIPTOR_REQUEST` targets a stale nwkAddr (delivery status 102), and the interview never advances past `epList:[]`. No user-accessible firmware upgrade path exists for the HUSBZB-1 Zigbee side. **Recommendation: pause Zigbee development and replace the coordinator.** The HUSBZB-1 Z-Wave side (`if00`) remains fully functional and is unaffected.
 
 ## Recommended Replacement Hardware
 
@@ -35,7 +35,7 @@ Zigbee support in PZB is **code-complete and test-complete (143/143 tests passin
      ```
 3. **Remove the HUSBZB-1 workaround patches** — they are no-ops on modern firmware and add maintenance drag:
    ```bash
-   rm /opt/paradox/apps/PZB/patches/zigbee-herdsman+3.5.2.patch
+   rm /opt/paradox/apps/PxB/patches/zigbee-herdsman+3.5.2.patch
    npm install
    ```
    (Leaving the patch file in place is also safe; all four patches are guarded and harmless on EZSP v8 / `zstack`.)
@@ -73,4 +73,4 @@ Zigbee support in PZB is **code-complete and test-complete (143/143 tests passin
 
 ## Status of This Branch
 
-All source, tests, docs, and patches are in place and committable. Zigbee code paths are guarded so PZB continues to run cleanly against the HUSBZB-1 today (`Zigbee controller start result: resumed`, `PZB ready`) — it simply cannot complete an interview. Once the new coordinator arrives, steps 1–7 above should take under an hour end-to-end.
+All source, tests, docs, and patches are in place and committable. Zigbee code paths are guarded so PxB continues to run cleanly against the HUSBZB-1 today (`Zigbee controller start result: resumed`, `PxB ready`) — it simply cannot complete an interview. Once the new coordinator arrives, steps 1–7 above should take under an hour end-to-end.

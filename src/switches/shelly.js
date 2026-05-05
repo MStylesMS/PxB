@@ -109,7 +109,7 @@ class ShellyAdapter extends AdapterBase {
         }
     }
 
-    handleStateUpdate(state) {
+    handleStateUpdate(_state) {
         // Shelly is command-driven; no upstream radio state integration needed.
     }
 

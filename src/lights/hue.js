@@ -204,7 +204,7 @@ class HueAdapter extends AdapterBase {
      * Handle state updates (called by PxB when upstream state changes).
      * For Hue, state is typically driven by API calls, not upstream events.
      */
-    handleStateUpdate(state) {
+    handleStateUpdate(_state) {
         // Hue is generally command-driven, not event-driven from radio nodes.
         // If needed for future use cases (e.g., scene based on room state).
     }

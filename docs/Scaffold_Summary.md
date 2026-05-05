@@ -1,6 +1,6 @@
-# PxB Scaffold Summary
+# PxB Repo Summary
 
-This document describes the initial repo layout created during the PxB scaffold. No runtime code exists yet — only structure, docs, and metadata.
+This document summarizes the current PxB repository layout. The project is no longer a scaffold-only repo: the runtime, CLI, unit tests, and operational docs are all present.
 
 ## Files
 
@@ -10,7 +10,7 @@ This document describes the initial repo layout created during the PxB scaffold.
 | `AI-INSTRUCTIONS.md` | Concise AI context (loaded automatically) |
 | `AI-DETAILED-OVERVIEW.md` | Full architecture / lifecycle / module layout |
 | `CLAUDE.md` | Pointer file for Claude workflows |
-| `package.json` | Node deps (`zwave-js`, `mqtt`, `ini`), scripts, `pzb` CLI bin |
+| `package.json` | Node deps, npm scripts, and the `pxb` CLI bin |
 | `.gitignore` | Node / runtime artefact ignores |
 | `docs/SPEC.md` | Functional specification |
 | `docs/MQTT_API.md` | Topic + payload contract |
@@ -19,31 +19,41 @@ This document describes the initial repo layout created during the PxB scaffold.
 | `docs/PR_PZB_INITIAL.md` | Phased implementation plan with model-routing tags |
 | `docs/Scaffold_Summary.md` | This file |
 
-## Planned Source Layout (Not Yet Created)
+## Current Source Layout
 
 ```
 src/
   index.js
-  config/{ini-loader.js, schema.js}
-  mqtt/{client.js, contract.js}
-  bridge/{bridge.js, heartbeat.js, node-registry.js, normalizer.js}
-  radios/zwave/{driver.js, events.js, commands.js, inclusion.js}
-  radios/zigbee/...            # phase 3
-  cli/{index.js, commands/*.js}
-  discovery/{ini-generator.js, discovered-store.js}
-  util/{logger.js, ids.js}
+  adapter-base.js
+  adapters/
+  bridge/
+  cli/
+  config/
+  discovery/
+  lights/
+  mqtt/
+  radios/
+    zwave/
+    zigbee/
+  switches/
+  util/
 test/
   unit/
-  fixtures/
 ```
 
-## Phases
+## What Exists Today
 
-See [PR_PZB_INITIAL.md](PR_PZB_INITIAL.md). Phases 0–2 cover Z-Wave phase 1 product. Phase 3 is Zigbee. Phase 4 is Thread. Phase 5 is hardening.
+- Runtime bridge entry point, heartbeat, MQTT contract, discovery store, and node registry
+- Z-Wave and Zigbee driver/event/inclusion flows
+- Direct output/control adapters for Hue, WiZ, LIFX, Shelly, and generic light zones
+- Unit tests covering config loading, drivers, bridge commands, discovery, normalizers, and device adapters
+- Backend-specific quick starts and migration-gap notes for the PFx-to-PxB transition
 
-## What Is Deliberately Missing
+## Follow-up Work
 
-- No `src/` yet — created alongside phase 1 implementation.
-- No tests yet — scaffolded with `jest` but no test files.
-- No systemd unit committed — template in QUICK_START only until we know final install prefix.
-- No CI config — added when first real code lands.
+See [PR_PZB_INITIAL.md](PR_PZB_INITIAL.md). The remaining items are concentrated in hardening, live hardware validation, and future Thread work.
+
+## Notes
+
+- The repo still includes planning and investigation documents from the scaffold phase because they record design decisions and hardware findings.
+- Some live hardware validation remains device-dependent even though the unit suite is broad.

@@ -1,10 +1,10 @@
-# PR: Paradox Z Bridge (PZB) — Initial Product
+# PR: PxB Initial Product Implementation
 
-**Status:** Draft v0.1 — design finalized, scaffold landed, implementation phased below.
+**Status:** Implemented through the initial delivery phases. Remaining items below are hardening, hardware-validation, and future-scope follow-up.
 
 ## Summary
 
-Introduce **PZB (Paradox Z Bridge)**, a focused Node.js service that owns Z-Wave (and later Zigbee / Thread) radios on a Paradox host and exposes a simple MQTT contract for all downstream consumers. PZB replaces the short-lived direct-radio path in PFx. PFx and every other Paradox product (PxO, Web UIs, PxT) consume PZB via MQTT.
+Introduce **PxB (Paradox Bridge)**, a focused Node.js service that owns Z-Wave (and later Zigbee / Thread) radios on a Paradox host and exposes a simple MQTT contract for all downstream consumers. PxB replaces the short-lived direct-radio path in PFx. PFx and every other Paradox product (PxO, Web UIs, PxT) consume PxB via MQTT.
 
 ## Motivation
 
@@ -36,7 +36,7 @@ See [AI-DETAILED-OVERVIEW.md](../AI-DETAILED-OVERVIEW.md). Key points:
 
 - Single process, singleton radio driver per serial port.
 - Modules: `config`, `mqtt`, `bridge`, `radios/zwave`, `cli`, `discovery`, `util`.
-- PFx migration: remove direct Z-Wave/Zigbee from PFx; PFx `input_topic` points at PZB node `events`; PFx light/relay backends gain a `bridge` mode publishing to PZB node `commands`.
+- PFx migration: remove direct Z-Wave/Zigbee from PFx; PFx `input_topic` points at PxB node `events`; PFx light/relay backends gain a `bridge` mode publishing to PxB node `commands`.
 
 ## Model Routing Legend
 
@@ -47,12 +47,12 @@ See [AI-DETAILED-OVERVIEW.md](../AI-DETAILED-OVERVIEW.md). Key points:
 
 ## Phase 0 — Scaffold & Documentation ✅
 
-- [x] Create `/opt/paradox/apps/PZB/` repo skeleton. 🟢
+- [x] Create `/opt/paradox/apps/PxB/` repo skeleton. 🟢
 - [x] Add `README.md`, `AI-INSTRUCTIONS.md`, `AI-DETAILED-OVERVIEW.md`, `CLAUDE.md`. 🟢
 - [x] Add `docs/SPEC.md`, `docs/MQTT_API.md`, `docs/CONFIG_INI.md`, `docs/QUICK_START.md`, `docs/Scaffold_Summary.md`. 🟢
 - [x] Add `package.json`, `.gitignore`. 🟢
-- [x] Update sibling AI-INSTRUCTIONS in PFx/PxO/PxC/PxT/Pio to reference the full family including PZB and Pio. 🟢
-- [x] Update `apps/PFx/docs/PR_ZWAVE_ZIGBEE_DIRECT.md` to pivot away from direct-in-PFx toward PZB bridge consumer. 🟢
+- [x] Update sibling AI-INSTRUCTIONS in PFx/PxO/PxC/PxT/Pio to reference the full family including PxB and Pio. 🟢
+- [x] Update `apps/PFx/docs/PR_ZWAVE_ZIGBEE_DIRECT.md` to pivot away from direct-in-PFx toward PxB bridge consumer. 🟢
 
 ### Gate
 - Design and docs reviewed and approved before any `src/` code lands.
@@ -68,7 +68,7 @@ See [AI-DETAILED-OVERVIEW.md](../AI-DETAILED-OVERVIEW.md). Key points:
 - [x] `src/config/ini-loader.js` — parse, validate, expand into typed config. 🟢
 - [x] `src/mqtt/client.js` — thin wrapper over `mqtt` lib with retained helpers. 🟢
 - [x] `src/mqtt/contract.js` — topic builders + retention policy. 🟢
-- [x] `src/bridge/heartbeat.js` — periodic `pzb/status` publisher. 🟢
+- [x] `src/bridge/heartbeat.js` — periodic `pzb/state` publisher. 🟢
 - [x] `src/index.js` — wire config + MQTT + heartbeat (no radio yet). 🟢
 - [x] Unit tests: schema, loader, topic builders, heartbeat cadence. 🟢
 
@@ -77,7 +77,7 @@ Gate: `node src/index.js --config <empty-nodes>` publishes retained heartbeat ev
 ### 1.2 Z-Wave Driver Lifecycle ✅
 
 - [x] `src/radios/zwave/driver.js` — zwave-js singleton, start/stop, reconnect backoff. 🔵
-- [x] Hook driver state into `pzb/status` (`radios.zwave.connected`, `node_count`). 🔵
+- [x] Hook driver state into `pzb/state` (`radios.zwave.connected`, `node_count`). 🔵
 - [x] Surface driver errors as bridge warnings. 🔵
 - [x] Integration tests with mocked driver fixture. 🔵
 
@@ -96,7 +96,7 @@ Gate: real spell-box open/close produces `open` / `close` events on its configur
 ### 1.4 CLI + MQTT Command Surface (Read-Only + Status) ✅
 
 - [x] `src/cli/index.js` — arg parser, subcommand loader. 🟢
-- [x] `pzb status` — dumps current retained `pzb/status` (pretty-printed). 🟢
+- [x] `pzb status` — dumps current retained `pzb/state` (pretty-printed). 🟢
 - [x] `pzb list-nodes` — prints configured + discovered nodes. 🟢
 - [x] MQTT `getNetworkStatus` handler. 🟢
 
@@ -117,7 +117,7 @@ Gate: installable on a Pi and boots under systemd.
 
 - [x] `src/radios/zwave/inclusion.js` — inclusion/exclusion state machine. 🟢
 - [x] MQTT handlers: `startInclusion`, `stopInclusion`, `startExclusion`, `stopExclusion`. 🟢
-- [x] Reflect active inclusion in `pzb/status.inclusion`. 🟢
+- [x] Reflect active inclusion in `pzb/state.inclusion`. 🟢
 - [x] Timeouts → `INCLUSION_TIMEOUT` bridge warning. 🟢
 
 Gate: real device includes and excludes reliably; timeouts handled cleanly.
@@ -169,7 +169,7 @@ Gate: at least one contact sensor and one on/off endpoint working on Sonoff EFR3
 
 - [ ] Survey library options (OTBR, ot-br-posix integration, vendor libs). 🔵
 - [ ] Draft Thread section in SPEC + CONFIG_INI with `[thread]`. 🔵
-- [ ] Decide on commissioner responsibilities (PZB vs external). 🔵
+- [ ] Decide on commissioner responsibilities (PxB vs external). 🔵
 
 No code in this phase.
 
@@ -190,19 +190,19 @@ No code in this phase.
 
 - **zwave-js version drift**: pin major in `package.json`; soak after bumps.
 - **Serial device name instability**: require stable `/dev/serial/by-id/...` paths; reject bare `/dev/ttyUSBn`.
-- **Double ownership during migration**: PFx direct-radio code must be removed before PZB goes live on the same host.
+- **Double ownership during migration**: PFx direct-radio code must be removed before PxB goes live on the same host.
 - **Retention mistakes**: node `events` and `state` must NEVER be published unretained; bridge `status` must NEVER be on-change-only.
 
 ## Validation Matrix (Phase 1 Exit)
 
 - [x] Heartbeat cadence within ±200ms of configured interval. *(unit tested)*
 - [ ] Contact sensor open/close → correct retained event + state update on change only. *(normalizer unit tested; end-to-end requires hardware)*
-- [ ] PFx `InputZone` consumes PZB events with no code changes. *(requires live integration test)*
-- [ ] USB unplug → `degraded` → replug → `ok` without PZB crash. *(requires hardware)*
+- [ ] PFx `InputZone` consumes PxB events with no code changes. *(requires live integration test)*
+- [ ] USB unplug → `degraded` → replug → `ok` without PxB crash. *(requires hardware)*
 - [x] Malformed INI → fails fast with actionable error. *(unit tested)*
 - [ ] Clean SIGTERM shutdown (no MQTT publish-after-disconnect). *(not yet tested)*
 
 ## Coordination
 
-- PFx PR: `apps/PFx/docs/PR_ZWAVE_ZIGBEE_DIRECT.md` — pivots direct path to PZB consumer, retires direct Z-Wave code from PFx in lockstep.
-- Web UIs (Houdini / Agent22): subscribe to `{base_topic}/pzb/status` for online/offline monitoring, same pattern already used for screen zones.
+- PFx PR: `apps/PFx/docs/PR_ZWAVE_ZIGBEE_DIRECT.md` — pivots direct path to PxB consumer, retires direct Z-Wave code from PFx in lockstep.
+- Web UIs (Houdini / Agent22): subscribe to `{base_topic}/pzb/state` for online/offline monitoring, same pattern already used for screen zones.

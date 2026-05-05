@@ -143,7 +143,7 @@ class LifxAdapter extends AdapterBase {
         }
     }
 
-    handleStateUpdate(state) {
+    handleStateUpdate(_state) {
         // LIFX is command-driven; no upstream radio state integration needed.
     }
 

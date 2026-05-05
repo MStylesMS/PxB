@@ -164,7 +164,7 @@ class WizAdapter extends AdapterBase {
         }
     }
 
-    handleStateUpdate(state) {
+    handleStateUpdate(_state) {
         // WiZ is command-driven; no upstream radio state integration needed.
     }
 

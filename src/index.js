@@ -106,7 +106,6 @@ async function main() {
     }
 
     // --- ZWaveEvents: wires driver → registry → MQTT (constructed after driver + registry) ---
-    // eslint-disable-next-line no-unused-vars
     let zwaveEvents = null;
     let zwaveInclusion = null;
     if (zwaveDriver) {
@@ -281,8 +280,7 @@ async function main() {
     heartbeat.start();
 
     // --- Bridge command handler (must come after heartbeat so buildStatus is ready) ---
-    // eslint-disable-next-line no-unused-vars
-    const commandHandler = new BridgeCommandHandler({
+    const _commandHandler = new BridgeCommandHandler({
         mqttClient: mqtt,
         baseTopic: config.mqtt.base_topic,
         getStatus: buildStatus,
@@ -295,8 +293,7 @@ async function main() {
     });
 
     // --- Per-node command handler (setRelay / pulseRelay for relay/switch nodes) ---
-    // eslint-disable-next-line no-unused-vars
-    const nodeCommandHandler = new NodeCommandHandler({
+    const _nodeCommandHandler = new NodeCommandHandler({
         mqttClient: mqtt,
         nodeRegistry,
         zwaveDriver,

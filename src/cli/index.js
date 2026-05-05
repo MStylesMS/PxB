@@ -10,8 +10,6 @@
  *   pxb help
  */
 
-const path = require('path');
-
 // ---- Minimal arg parser -----------------------------------------------
 
 function parseArgs(argv) {

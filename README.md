@@ -16,7 +16,7 @@ PFx was evolving toward direct Z-Wave and Zigbee ownership. That coupled the rad
 
 ## Project Status
 
-**Early scaffold.** Design locked. No runtime implementation yet. See [docs/PR_PZB_INITIAL.md](docs/PR_PZB_INITIAL.md) for the phased plan and checklist.
+**Implemented and test-backed.** PxB now has a working runtime, CLI, direct light and switch backends, Z-Wave and Zigbee bridge flows, backend-specific quick starts, and a green unit suite. The remaining work is mostly hardening, live hardware validation on specific coordinators/devices, and documentation polish. See [docs/PR_PZB_INITIAL.md](docs/PR_PZB_INITIAL.md) for the phased implementation record and outstanding follow-up items.
 
 ## Documentation
 
