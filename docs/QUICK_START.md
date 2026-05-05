@@ -1,5 +1,18 @@
 # PxB Quick Start
 
+This page covers the baseline bridge bring-up flow. For migrated PFx backends,
+see the backend-specific quick starts in this directory:
+
+- [QUICK_START_HUE.md](QUICK_START_HUE.md)
+- [QUICK_START_WIZ.md](QUICK_START_WIZ.md)
+- [QUICK_START_LIFX.md](QUICK_START_LIFX.md)
+- [QUICK_START_SHELLY.md](QUICK_START_SHELLY.md)
+- [QUICK_START_ZWAVE.md](QUICK_START_ZWAVE.md)
+- [QUICK_START_ZIGBEE.md](QUICK_START_ZIGBEE.md)
+
+If you want the current parity gaps versus the legacy PFx quick starts, see
+[PR_PFX_BACKEND_MIGRATION_GAPS.md](PR_PFX_BACKEND_MIGRATION_GAPS.md).
+
 ## 1. Install
 
 ```bash
