@@ -1,0 +1,15 @@
+node_modules/
+npm-debug.log*
+*.log
+logs/
+.env
+.env.*
+cache/
+.vscode/
+.DS_Store
+coverage/
+dist/
+build/
+# PZB runtime artifacts
+*.ini.local
+discovered.ini

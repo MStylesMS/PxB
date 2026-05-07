@@ -1,0 +1,44 @@
+diff --git a/node_modules/zigbee-herdsman/dist/adapter/ezsp/driver/driver.js b/node_modules/zigbee-herdsman/dist/adapter/ezsp/driver/driver.js
+index fd8ae12..aa8acd9 100644
+--- a/node_modules/zigbee-herdsman/dist/adapter/ezsp/driver/driver.js
++++ b/node_modules/zigbee-herdsman/dist/adapter/ezsp/driver/driver.js
+@@ -257,7 +257,7 @@ class Driver extends node_events_1.EventEmitter {
+     }
+     async formNetwork(restore, transmitPower) {
+         let backup;
+-        await this.ezsp.execCommand('clearTransientLinkKeys');
++        try { await this.ezsp.execCommand('clearTransientLinkKeys'); } catch { /* HUSBZB-1 old fw (EmberZNet 5.x) does not support this command */ }
+         let initial_security_state;
+         if (restore) {
+             backup = await this.backupMan.getStoredBackup();
+@@ -692,17 +692,25 @@ class Driver extends node_events_1.EventEmitter {
+             const ieee = new named_1.EmberEUI64('0xFFFFFFFFFFFFFFFF');
+             const linkKey = new types_1.EmberKeyData();
+             linkKey.contents = Buffer.from('ZigBeeAlliance09');
+-            const result = await this.addTransientLinkKey(ieee, linkKey);
+-            if (result.status !== types_1.EmberStatus.SUCCESS) {
+-                throw new Error(`Add Transient Link Key for '${ieee}' failed`);
+-            }
++            try {
++                const result = await this.addTransientLinkKey(ieee, linkKey);
++                if (result.status !== types_1.EmberStatus.SUCCESS) {
++                    throw new Error(`Add Transient Link Key for '${ieee}' failed`);
++                }
++            } catch { /* HUSBZB-1 old fw (EmberZNet 5.x) does not support addTransientLinkKey — skip */ }
+             if (this.ezsp.ezspV >= 8) {
+                 await this.ezsp.setPolicy(named_1.EzspPolicyId.TRUST_CENTER_POLICY, named_1.EzspDecisionBitmask.ALLOW_UNSECURED_REJOINS | named_1.EzspDecisionBitmask.ALLOW_JOINS);
+                 //| EzspDecisionBitmask.JOINS_USE_INSTALL_CODE_KEY
++            } else {
++                // Old EmberZNet 5.x (EZSP v4/v5): addTransientLinkKey is unsupported, so the
++                // coordinator cannot set the well-known ZHA key "ZigBeeAlliance09" as a transient
++                // link key. Without it, sensors cannot decrypt the transport key. Setting TC policy
++                // to SEND_KEY_IN_THE_CLEAR (1) makes the firmware send the network key unencrypted.
++                await this.ezsp.setPolicy(named_1.EzspPolicyId.TRUST_CENTER_POLICY, types_1.EmberJoinDecision.SEND_KEY_IN_THE_CLEAR);
+             }
+         }
+         else {
+-            await this.ezsp.execCommand('clearTransientLinkKeys');
++            try { await this.ezsp.execCommand('clearTransientLinkKeys'); } catch { /* HUSBZB-1 old fw (EmberZNet 5.x) does not support this command */ }
+         }
+     }
+     async permitJoining(seconds) {
