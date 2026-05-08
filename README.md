@@ -59,3 +59,13 @@ PxB is one product in a set that composes a full escape-room stack:
 - **PxB** — Z-Wave / Zigbee / Thread bridge (this project)
 
 All components share the same MQTT topic convention: `{baseTopic}/{commands|events|state|warnings}`.
+
+
+## License
+
+Dual-licensed:
+
+- **AGPL-3.0** for open source use — see [LICENSE](LICENSE).
+- **Commercial license required** for proprietary or revenue-generating use that does not comply with AGPL-3.0 — see [COMMERCIAL.md](COMMERCIAL.md).
+
+Copyright © 2026 Mark Stevens.
