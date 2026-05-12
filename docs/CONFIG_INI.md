@@ -12,6 +12,7 @@ PxB is configured by a single INI file. Pass the path via `--config` or default 
 | `[global]` | Process-wide defaults | 0–1 |
 | `[zwave]` | Z-Wave radio endpoint | 0–1 |
 | `[zigbee]` | Zigbee radio endpoint | 0–1 |
+| `[dmx]` | DMX512 universe output | 0–1 |
 | `[node:<label>]` | One configured device | 0–N |
 
 ## `[mqtt]`
@@ -74,6 +75,33 @@ When `db_path` is set (or defaulted), PxB also writes two companion files in the
 - Coordinator network backup: `zigbee-network.db`
 
 File permissions should be `0600` when `network_key` is set.
+
+## `[dmx]`
+
+Configures one DMX512 output universe. One section per process.
+
+| Key | Type | Required | Default | Description |
+|-----|------|:--------:|---------|-------------|
+| `enabled` | bool | no | `true` | Disable without removing section |
+| `interface` | string | yes | — | `opendmx` (direct FTDI; Phase 1). `enttec-pro` accepted only from Phase 4 onward |
+| `port` | path | yes | — | Serial device path. Prefer stable `/dev/serial/by-id/usb-FTDI_FT232R...` form |
+| `refresh_hz` | int | no | `30` | Frame repeat rate (1–44 Hz). Actual Hz may be lower due to baud-switch overhead |
+| `universe_size` | int | no | `512` | Slot count sent per frame (24–512) |
+| `ftdi_latency_ms` | int | no | `4` | FTDI latency timer in ms (opendmx only). Set to 4 or lower; the udev rule in `config/udev/99-ftdi-dmx.rules` applies this on plug-in |
+
+**Important:** `interface = opendmx` uses the baud-rate-switch BREAK method (open at 76800 baud, send `0x00`, reopen at 250000 baud). The `port.set({brk})` method is unreliable on ftdi_sio + Pi5 and must **not** be used. This is encoded in `src/dmx/interfaces/opendmx.js`.
+
+**Phase gate:** `interface = enttec-pro` is accepted in the schema but causes a startup error until Phase 4 ships the Enttec Pro backend. This prevents silent misconfiguration.
+
+Example:
+
+```ini
+[dmx]
+enabled     = true
+interface   = opendmx
+port        = /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_B002JE1K-if00-port0
+refresh_hz  = 30
+```
 
 ## `[node:<label>]`
 

@@ -25,6 +25,7 @@ const LifxAdapter = require('./lights/lifx');
 const ShellyAdapter = require('./switches/shelly');
 const LightZoneAdapter = require('./lights/zone');
 const UnavailableOutputAdapter = require('./adapters/unavailable-output');
+const { DmxUniverse } = require('./dmx/universe');
 
 const LOCK_DIR_CANDIDATES = ['/run/paradox', '/tmp/paradox'];
 let singletonLockPath = null;
@@ -87,6 +88,24 @@ async function main() {
 
     // --- Node registry (always constructed; tracks runtime node state) ---
     const nodeRegistry = new NodeRegistry(config.nodes);
+
+    // --- DMX universe (constructed eagerly; started after radios) ---
+    let dmxUniverse = null;
+    if (config.dmx && config.dmx.enabled) {
+        dmxUniverse = new DmxUniverse({
+            port:          config.dmx.port,
+            interface:     config.dmx.interface,
+            refresh_hz:    config.dmx.refresh_hz,
+            universe_size: config.dmx.universe_size,
+        });
+
+        dmxUniverse.on('warning', (w) => {
+            publishBridgeWarning(mqtt, config.mqtt.base_topic, w);
+        });
+        dmxUniverse.on('state-changed', () => {
+            if (heartbeat) heartbeat.flush();
+        });
+    }
 
     // --- Z-Wave driver (constructed eagerly; started after MQTT is up) ---
     let zwaveDriver = null;
@@ -266,6 +285,9 @@ async function main() {
                 zwave: zwaveStatus,
                 zigbee: zigbeeStatus,
             },
+            dmx: dmxUniverse
+                ? { ...dmxUniverse.getStatus() }
+                : (config.dmx ? { enabled: config.dmx.enabled, connected: false } : { enabled: false }),
             nodes: nodeRegistry.getSummary(),
             inclusion,
             subsystems: registry.getSummary(),
@@ -330,6 +352,15 @@ async function main() {
             await zigbeeDriver.start();
         } catch (err) {
             logger.error(`Zigbee initial start failed (will retry): ${err.message}`);
+        }
+    }
+
+    // --- Start DMX universe (after radios) ---
+    if (dmxUniverse) {
+        try {
+            await dmxUniverse.start();
+        } catch (err) {
+            logger.error(`DMX universe start failed (will retry): ${err.message}`);
         }
     }
 
@@ -553,6 +584,9 @@ async function main() {
         }
         if (zigbeeDriver) {
             try { await zigbeeDriver.stop(); } catch (err) { logger.warn(`Zigbee stop error: ${err.message}`); }
+        }
+        if (dmxUniverse) {
+            try { await dmxUniverse.dispose(); } catch (err) { logger.warn(`DMX dispose error: ${err.message}`); }
         }
         heartbeat.flush({ state: 'stopping' });
         heartbeat.stop();

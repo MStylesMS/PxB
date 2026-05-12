@@ -14,11 +14,13 @@ PxB (Paradox Bridge) is a single-process Node.js service that bridges Z-Wave (an
 
 ## 3. Supported Device Classes
 
-Phase 1 hardware support:
+Current hardware support:
 - **Contact sensors** (input) — open/close events.
 - **Relays / switches** (output) — on/off, pulse.
+- **Network lights** (output) — Philips Hue, WiZ, LIFX.
+- **DMX output** (output) — one DMX512 universe via USB-to-DMX cable (FTDI FT232R / Open DMX interface). See [`[dmx]`](CONFIG_INI.md#dmx) configuration. Phase 4 adds Enttec DMX USB Pro.
 
-Additional classes (dimmers, multilevel sensors, thermostats, etc.) are explicitly **out of scope for phase 1** and will be added in later phases as separate PRs.
+Additional classes (dimmers, multilevel sensors, thermostats, etc.) will be added in later phases as separate PRs.
 
 ## 4. Core Responsibilities
 
@@ -54,6 +56,7 @@ INI file. One file per process. Sections:
 - `[global]` — log level, heartbeat interval, discovered topic prefix.
 - `[zwave]` — serial port, network key(s), enable flag.
 - `[zigbee]` — serial port, db path, enable flag (adapter path is fixed to Ember).
+- `[dmx]` — DMX512 universe output via USB-to-DMX cable (one universe per process).
 - `[node:<label>]` — one per known device.
 
 See [CONFIG_INI.md](CONFIG_INI.md) for full key list.

@@ -11,6 +11,8 @@ const {
     VALID_LIGHT_BACKENDS,
     VALID_HUE_TARGET_TYPES,
     VALID_SWITCH_BACKENDS,
+    VALID_DMX_INTERFACES,
+    IMPLEMENTED_DMX_INTERFACES,
 } = require('./schema');
 
 /**
@@ -80,6 +82,7 @@ function loadConfig(configPath) {
         lights: {},
         light_zones: {},
         switches: {},
+        dmx: null,
     };
 
     // --- [mqtt] (required) ---
@@ -144,8 +147,38 @@ function loadConfig(configPath) {
         }
     }
 
-    // --- [node:<label>] sections ---
-    const seenTopics = new Map(); // base_topic -> label
+    // --- [dmx] (optional) ---
+    if (raw.dmx) {
+        try {
+            const dmx = applySchema(SCHEMA.dmx, raw.dmx, 'dmx');
+
+            if (!VALID_DMX_INTERFACES.has(dmx.interface)) {
+                errors.push(
+                    `[dmx] unknown interface "${dmx.interface}" — expected: ${[...VALID_DMX_INTERFACES].join(', ')}`
+                );
+            } else if (!IMPLEMENTED_DMX_INTERFACES.has(dmx.interface)) {
+                errors.push(
+                    `[dmx] interface "${dmx.interface}" is not yet implemented (Phase 4). ` +
+                    `Set interface = opendmx to use the direct FTDI driver.`
+                );
+            }
+
+            if (dmx.refresh_hz < 1 || dmx.refresh_hz > 44) {
+                errors.push(`[dmx] refresh_hz must be between 1 and 44, got: ${dmx.refresh_hz}`);
+            }
+
+            if (dmx.universe_size < 24 || dmx.universe_size > 512) {
+                errors.push(`[dmx] universe_size must be between 24 and 512, got: ${dmx.universe_size}`);
+            }
+
+            config.dmx = dmx;
+        } catch (e) {
+            errors.push(e.message);
+        }
+    }
+
+    // --- [node:<label>] sections --- // base_topic -> label
+    const seenTopics  = new Map(); // base_topic -> label
     const seenNodeIds = new Map(); // `${radio}:${node_id}` -> label
 
     for (const [sectionKey, sectionVal] of Object.entries(raw)) {

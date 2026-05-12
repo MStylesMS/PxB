@@ -84,6 +84,14 @@ const SCHEMA = {
         port: { required: false, type: 'int' },
         timeout_s: { required: false, type: 'int', default: 10 },
     },
+    dmx: {
+        enabled:         { required: false, type: 'bool',   default: true },
+        interface:       { required: true,  type: 'string' },
+        port:            { required: true,  type: 'path' },
+        refresh_hz:      { required: false, type: 'int',    default: 30 },
+        universe_size:   { required: false, type: 'int',    default: 512 },
+        ftdi_latency_ms: { required: false, type: 'int',    default: 4 },
+    },
 };
 
 const VALID_NODE_LABEL = /^[a-z0-9][a-z0-9-]*$/;
@@ -93,6 +101,9 @@ const VALID_LIGHT_BACKENDS = new Set(['hue', 'lifx', 'wiz']);
 const VALID_HUE_TARGET_TYPES = new Set(['all', 'group', 'light']);
 const VALID_SWITCH_BACKENDS = new Set(['shelly']);
 const VALID_ZONE_TYPES = new Set(['lights', 'switches']);
+const VALID_DMX_INTERFACES = new Set(['opendmx', 'enttec-pro']);
+// Phase gate: enttec-pro is known but not implemented until Phase 4.
+const IMPLEMENTED_DMX_INTERFACES = new Set(['opendmx']);
 
 module.exports = {
     SCHEMA,
@@ -103,4 +114,6 @@ module.exports = {
     VALID_HUE_TARGET_TYPES,
     VALID_SWITCH_BACKENDS,
     VALID_ZONE_TYPES,
+    VALID_DMX_INTERFACES,
+    IMPLEMENTED_DMX_INTERFACES,
 };
