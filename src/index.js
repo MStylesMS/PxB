@@ -9,6 +9,7 @@ const { Heartbeat } = require('./bridge/heartbeat');
 const { publishBridgeWarning } = require('./bridge/warnings');
 const { NodeRegistry } = require('./bridge/node-registry');
 const { BridgeCommandHandler } = require('./bridge/command-handler');
+const { SubsystemRegistry } = require('./bridge/subsystem-registry');
 const { ZWaveDriver } = require('./radios/zwave/driver');
 const { ZWaveEvents } = require('./radios/zwave/events');
 const { ZWaveInclusion } = require('./radios/zwave/inclusion');
@@ -74,8 +75,15 @@ async function main() {
 
     const startTime = Date.now();
 
+    // --- Subsystem registry (created before any components) ---
+    const registry = new SubsystemRegistry();
+
     // --- MQTT client ---
-    const mqtt = new MqttClient(config.mqtt);
+    const mqtt = new MqttClient(config.mqtt, registry);
+
+    // Wire publishWarning into registry so crash events surface on MQTT.
+    // Done after mqtt is created; the registry was created before mqtt so ordering is safe.
+    registry._publishWarning = (w) => publishBridgeWarning(mqtt, config.mqtt.base_topic, w);
 
     // --- Node registry (always constructed; tracks runtime node state) ---
     const nodeRegistry = new NodeRegistry(config.nodes);
@@ -92,6 +100,7 @@ async function main() {
                 s2_auth: config.zwave.network_key_s2_auth,
                 s2_access: config.zwave.network_key_s2_access,
             },
+            registry,
         });
 
         zwaveDriver.on('warning', (w) => {
@@ -176,6 +185,7 @@ async function main() {
             baudRate: config.zigbee.baud_rate,
             databasePath: config.zigbee.db_path,
             network: Object.keys(zNet).length ? zNet : null,
+            registry,
         });
 
         zigbeeDriver.on('warning', (w) => {
@@ -258,6 +268,7 @@ async function main() {
             },
             nodes: nodeRegistry.getSummary(),
             inclusion,
+            subsystems: registry.getSummary(),
             ...overrides,
         };
     }
@@ -377,6 +388,27 @@ async function main() {
             await adapter.init();
             domainAdapters.lights.set(label, adapter);
             logger.info(`Light adapter '${label}' initialized (${lightConfig.backend})`);
+
+            // Register with the subsystem registry for fault containment.
+            // Capture adapter + label in closure so onCrash can clean up correctly.
+            const _capturedAdapter = adapter;
+            const _capturedConfig = lightConfig;
+            registry.register({
+                id: `light-${label}`,
+                kind: 'output-adapter',
+                criticality: 'optional',
+                onCrash: async (err) => {
+                    try { await _capturedAdapter.dispose(); } catch { /* ignore */ }
+                    await attachUnavailableOutput({
+                        label,
+                        backend: _capturedConfig.backend,
+                        domain: 'light',
+                        config: _capturedConfig,
+                        reason: err instanceof Error ? err.message : String(err),
+                        targetMap: domainAdapters.lights,
+                    });
+                },
+            });
         } catch (err) {
             logger.warn(`Light adapter '${label}' failed to initialize: ${err.message}`);
             publishAdapterInitWarning(lightConfig.topic, label, err.message);
@@ -417,6 +449,25 @@ async function main() {
 
             domainAdapters.lights.set(label, zoneAdapter);
             logger.info(`Light zone '${label}' initialized with ${members.size} members`);
+
+            const _capturedZoneAdapter = zoneAdapter;
+            const _capturedZoneConfig = zoneConfig;
+            registry.register({
+                id: `light-zone-${label}`,
+                kind: 'output-adapter',
+                criticality: 'optional',
+                onCrash: async (err) => {
+                    try { await _capturedZoneAdapter.dispose(); } catch { /* ignore */ }
+                    await attachUnavailableOutput({
+                        label,
+                        backend: 'light-zone',
+                        domain: 'light-zone',
+                        config: _capturedZoneConfig,
+                        reason: err instanceof Error ? err.message : String(err),
+                        targetMap: domainAdapters.lights,
+                    });
+                },
+            });
         } catch (err) {
             logger.warn(`Light zone '${label}' failed to initialize: ${err.message}`);
             publishAdapterInitWarning(zoneConfig.topic, label, err.message);
@@ -445,6 +496,25 @@ async function main() {
             await adapter.init();
             domainAdapters.switches.set(label, adapter);
             logger.info(`Switch adapter '${label}' initialized (${switchConfig.backend})`);
+
+            const _capturedSwitchAdapter = adapter;
+            const _capturedSwitchConfig = switchConfig;
+            registry.register({
+                id: `switch-${label}`,
+                kind: 'output-adapter',
+                criticality: 'optional',
+                onCrash: async (err) => {
+                    try { await _capturedSwitchAdapter.dispose(); } catch { /* ignore */ }
+                    await attachUnavailableOutput({
+                        label,
+                        backend: _capturedSwitchConfig.backend,
+                        domain: 'switch',
+                        config: _capturedSwitchConfig,
+                        reason: err instanceof Error ? err.message : String(err),
+                        targetMap: domainAdapters.switches,
+                    });
+                },
+            });
         } catch (err) {
             logger.warn(`Switch adapter '${label}' failed to initialize: ${err.message}`);
             publishAdapterInitWarning(switchConfig.topic, label, err.message);
@@ -500,13 +570,32 @@ async function main() {
     process.on('SIGTERM', () => safeShutdown('SIGTERM'));
     process.on('SIGINT',  () => safeShutdown('SIGINT'));
     process.on('uncaughtException', (err) => {
-        logger.error(`Uncaught exception — shutting down: ${err.stack || err.message}`);
-        safeShutdown('CRASH').finally(() => process.exit(1));
+        const attribution = registry.attribute();
+        if (attribution && attribution.criticality === 'optional') {
+            // Contained crash: keep the process running, invoke the subsystem's onCrash handler.
+            registry.crash(attribution.subsystemId, err).catch((crashErr) => {
+                logger.error(`Registry.crash() threw during uncaughtException handling: ${crashErr.message}`);
+            });
+        } else {
+            // Unattributed or fatal: preserve existing shutdown behavior.
+            logger.error(`Uncaught exception — shutting down: ${err.stack || err.message}`);
+            safeShutdown('CRASH').finally(() => process.exit(1));
+        }
     });
     process.on('unhandledRejection', (reason) => {
-        const msg = reason instanceof Error ? reason.stack || reason.message : String(reason);
-        logger.error(`Unhandled rejection — shutting down: ${msg}`);
-        safeShutdown('CRASH').finally(() => process.exit(1));
+        const attribution = registry.attribute();
+        if (attribution && attribution.criticality === 'optional') {
+            // Contained crash: keep the process running.
+            const err = reason instanceof Error ? reason : new Error(String(reason));
+            registry.crash(attribution.subsystemId, err).catch((crashErr) => {
+                logger.error(`Registry.crash() threw during unhandledRejection handling: ${crashErr.message}`);
+            });
+        } else {
+            // Unattributed or fatal: preserve existing shutdown behavior.
+            const msg = reason instanceof Error ? reason.stack || reason.message : String(reason);
+            logger.error(`Unhandled rejection — shutting down: ${msg}`);
+            safeShutdown('CRASH').finally(() => process.exit(1));
+        }
     });
 
     logger.info('PxB ready');

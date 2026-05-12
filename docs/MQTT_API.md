@@ -56,11 +56,28 @@ Retained. Republished every `heartbeat_interval` seconds.
     "zigbee": { "enabled": false }
   },
   "nodes": { "total": 4, "ready": 4, "failed": 0, "interviewing": 0 },
-  "inclusion": { "active": false, "radio": null, "mode": null, "started_at": null, "timeout_ms": null }
+  "inclusion": { "active": false, "radio": null, "mode": null, "started_at": null, "timeout_ms": null },
+  "subsystems": {
+    "mqtt-client":  "ok",
+    "zwave-driver": "ok",
+    "zigbee-driver": "ok",
+    "light-mirror": "ok",
+    "switch-fogger": "crashed"
+  }
 }
 ```
 
 `state ∈ {ok, degraded, error, starting, stopping}` (when inclusion/exclusion is active, `inclusion.active=true` and `inclusion.mode ∈ {inclusion, exclusion}`).
+
+`subsystems` maps each registered subsystem id to its status. Status values:
+
+| Status | Meaning |
+|--------|---------|
+| `ok` | Subsystem is running normally |
+| `crashed` | Subsystem threw an unhandled error; it has been contained and stopped. The rest of PxB is still running. |
+| `fatal` | Reserved for future use (fatal subsystem crash drives process exit before status can be written) |
+
+Subsystem ids follow the convention `<kind>-<label>`, e.g. `light-mirror`, `switch-fogger`, `zwave-driver`.
 
 ## 4. Bridge Commands (`pzb/commands`)
 
@@ -95,6 +112,9 @@ Standard codes (phase 1):
 - `INCLUSION_TIMEOUT`, `EXCLUSION_TIMEOUT`
 - `UNKNOWN_NODE_COMMAND`
 - `CONFIG_VALIDATION_WARNING`
+
+Standard codes (fault isolation):
+- `SUBSYSTEM_CRASH` — An optional subsystem threw an uncaught exception or unhandled rejection. The process kept running; the subsystem has been stopped. Payload `context` includes `subsystem_id` (e.g. `light-mirror`) and `kind` (e.g. `output-adapter`). Severity: `error`.
 
 ## 6. Discovery Notices (`pzb/discovered/<radio>/<id>`)
 
