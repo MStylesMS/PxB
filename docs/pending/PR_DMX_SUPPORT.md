@@ -63,26 +63,72 @@ Phases 0–2 are **strictly sequential**. Phases 3–7 are independent and can b
 
 **Goal:** Prove the cable can actually drive a DMX fixture from this Pi before we touch PxB.
 
-This phase produces **no PR**. It is a one-shot validation script kept in `/opt/paradox/scratch/dmx-probe/` (gitignored) or under `tools/` if useful enough to keep.
+This phase produces **no PR**. The validation script lives in `tools/dmx-probe/` (committed, excluded from production builds).
+
+### Validation Fixture
+
+**6-Channel RGBW LED PAR** (generic Chinese LED par, confirmed on-hand):
+
+Set the fixture to DMX address **1** and **6CH mode** using its onboard display (press Menu → set `A` to `001`, set mode to `DMX 6CH`).
+
+Channel layout:
+
+| Channel | Range | Function |
+|---------|-------|----------|
+| CH1 | 0–8 | No effect (master off) |
+| CH1 | 9–134 | Master dimmer: RGBW dark → bright |
+| CH1 | 135–239 | Strobe: slow → fast |
+| CH1 | 240–255 | Activate CH2–CH5 independent control |
+| CH2 | 0 | Red off |
+| CH2 | 1–255 | Red dark → bright |
+| CH3 | 0 | Green off |
+| CH3 | 1–255 | Green dark → bright |
+| CH4 | 0 | Blue off |
+| CH4 | 1–255 | Blue dark → bright |
+| CH5 | 0 | White off |
+| CH5 | 1–255 | White dark → bright |
+| CH6 | 0–2 | No effect |
+| CH6 | 3–223 | Various auto-programs |
+| CH6 | 224–255 | Sound-reactive programs (ignore for validation) |
+
+**For Phase 0 testing:** Set CH1=240 (independent RGBW mode), then exercise CH2–CH5 individually. CH6=0 throughout validation (disables auto-programs).
 
 ### Tasks
-- [ ] Confirm `paradox` user is in the `dialout` group (or add a udev rule for `0403:6001` that grants the service user access without sudo).
+- [ ] Confirm `paradox` user is in the `dialout` group (`groups paradox`), or add a udev rule for `0403:6001` that grants access without sudo.
 - [ ] Verify no other process owns the port (`lsof /dev/ttyUSB0`).
-- [ ] Write a 30-line Node script using `serialport` that:
-  - opens the port at 250000 baud, 8N2,
-  - sends BREAK (≥88 µs) + MAB (≥8 µs) + start code `0x00` + 512 data slots,
-  - repeats at ~30 Hz for 10 s,
-  - cycles channel 1 between 0/127/255.
-- [ ] Connect a known DMX fixture (single-channel dimmer or 3-channel RGB par) at DMX address 1 and visually confirm response.
-- [ ] Record observed behavior: does the fixture flicker? Does output survive `top`/`stress -c 4` on the Pi? Capture the FTDI `latency_timer` value that gave the cleanest output (typically 1–4 ms).
+- [ ] Write validation script `tools/dmx-probe/probe.js` using `serialport` that:
+  - opens `/dev/ttyUSB0` at 250000 baud, 8N2,
+  - generates BREAK (≥88 µs via baud-rate switch to 76800 + send 0x00 + restore) + MAB (≥8 µs) + start code `0x00` + 512 data slots,
+  - repeats at ~30 Hz,
+  - runs the sequence: CH1=240, CH2–CH5 cycle R→G→B→W→RGBW→off (3 s each),
+  - runs for ≥60 s then exits cleanly.
+- [ ] Connect fixture at DMX address 1 in 6CH mode and visually confirm each color step fires correctly.
+- [ ] Run under load: `stress -c 4` in a second terminal during the last 30 s of the test. Observe any flicker.
+- [ ] Record the FTDI `latency_timer` value used (try 1, 4, 16 ms). Note which produced the cleanest output.
+
+### Fixture setup reference (onboard display)
+```
+Press Menu → scroll to "A" → set 001 → ENTER    (DMX start address = 1)
+Press Menu → scroll to run mode → set "1"        (6CH DMX mode; label may read "DMX (6CH)")
+```
 
 ### Exit criteria
-- A fixture responds correctly and predictably for ≥60 s of continuous output under light system load.
-- If validation fails, **stop here.** Either replace the cable with an Enttec DMX USB Pro class adapter and re-run Phase 0, or open a separate issue documenting the failure mode.
+- Each of R, G, B, W channels responds at the correct DMX address with no cross-talk to adjacent channels.
+- Output is stable for ≥60 s under load with no visible flicker.
+- If the fixture flickers badly even at `latency_timer=1`, **stop and document** before continuing. This is likely a timing problem with the cable under Pi5 load, and Phase 4 (Enttec Pro) becomes the path forward for production.
+
+### Results (fill in after running)
+| Field | Value |
+|---|---|
+| Date | |
+| Fixture response | |
+| `latency_timer` used | |
+| Load test result | |
+| Blocker / notes | |
 
 ### Recommended AI model
 - **Claude Sonnet — Medium**
-- Local hardware poking + small Node script. No architectural decisions, no doc churn. Cheaper models are fine, but Sonnet/Medium catches FTDI timing gotchas (`latency_timer`, `flush`, BREAK via `setBreak` vs. baud-switching) reliably.
+- Local hardware poking + small Node script. No architectural decisions, no doc churn.
 
 ---
 
