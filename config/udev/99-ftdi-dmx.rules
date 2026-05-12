@@ -1,0 +1,13 @@
+# /etc/udev/rules.d/99-ftdi-dmx.rules
+#
+# FTDI FT232R USB UART — USB-to-DMX cable
+#
+# Sets latency_timer to 4 ms (down from the default 16 ms) on plug-in.
+# This reduces DMX frame jitter without requiring manual sudo writes.
+#
+# Verify with: cat /sys/bus/usb-serial/devices/ttyUSBx/latency_timer
+# For even lower latency, change 4 to 1 (though 4 is stable on Pi5 under load).
+#
+ACTION=="add", SUBSYSTEM=="usb-serial", DRIVER=="ftdi_sio", \
+    ATTR{../../../idVendor}=="0403", ATTR{../../../idProduct}=="6001", \
+    RUN+="/bin/sh -c 'echo 4 > /sys/bus/usb-serial/devices/%k/latency_timer'"
