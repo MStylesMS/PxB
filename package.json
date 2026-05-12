@@ -10,6 +10,7 @@
     "start": "node src/index.js",
     "test": "jest --runInBand --testTimeout=20000",
     "test:unit": "jest test/unit --runInBand --testTimeout=20000",
+    "test:soak": "jest test/soak --runInBand --forceExit",
     "lint": "eslint src test",
     "postinstall": "patch-package"
   },
