@@ -172,18 +172,18 @@ ftdi_latency_ms = 4                       ; opendmx only; ignored otherwise
 Schema work in `src/config/schema.js` + validation in `src/config/ini-loader.js`. Reject `interface = enttec-pro` with a clear "phase 4" error until that backend lands.
 
 ### Tasks
-- [ ] Add `serialport` dependency to `package.json` (pin a current major; verify Pi5 aarch64 prebuilt available).
-- [ ] Update `docs/SPEC.md` §3 (Supported Device Classes) to include DMX output.
-- [ ] Update `docs/SPEC.md` §7 (Configuration Model) to list the `[dmx]` section.
-- [ ] Add `docs/CONFIG_INI.md` `[dmx]` reference with key table.
-- [ ] Add `src/dmx/universe.js`, `src/dmx/interfaces/opendmx.js`, `src/dmx/interfaces/index.js` factory.
-- [ ] Wire universe construction into `src/index.js` after MQTT connect, before light adapters.
-- [ ] Surface universe status in `pxb/state.radios` (rename to `radios_and_buses` would be a bigger doc change — for now, add `dmx` as a sibling key under `radios` and note it in MQTT_API.md §3).
-- [ ] Unit tests in `test/unit/dmx/`:
+- [x] Add `serialport` dependency to `package.json` (pin a current major; verify Pi5 aarch64 prebuilt available).
+- [x] Update `docs/SPEC.md` §3 (Supported Device Classes) to include DMX output.
+- [x] Update `docs/SPEC.md` §7 (Configuration Model) to list the `[dmx]` section.
+- [x] Add `docs/CONFIG_INI.md` `[dmx]` reference with key table.
+- [x] Add `src/dmx/universe.js`, `src/dmx/interfaces/opendmx.js`, `src/dmx/interfaces/index.js` factory.
+- [x] Wire universe construction into `src/index.js` after MQTT connect, before light adapters.
+- [x] Surface universe status in `pxb/state.radios` (rename to `radios_and_buses` would be a bigger doc change — for now, add `dmx` as a sibling key under `radios` and note it in MQTT_API.md §3).
+- [x] Unit tests in `test/unit/dmx/`:
   - `universe.test.js` — channel set/clamp/dirty/blackout, status shape.
   - `opendmx.test.js` — frame composition (start code, BREAK timing call, slot count), with `serialport` mocked.
   - `ini-loader.test.js` extension — schema accepts/rejects `[dmx]` keys.
-- [ ] Manual smoke test on the Pi5 using the Phase 0 fixture: start PxB with `[dmx]` configured, no `[light:*]` sections, confirm continuous frame transmission via `top`/`strace -p`.
+- [x] Manual smoke test on the Pi5 using the Phase 0 fixture: start PxB with `[dmx]` configured, no `[light:*]` sections, confirm continuous frame transmission via `top`/`strace -p`.
 
 ### Out of scope for Phase 1
 - MQTT-addressable lights — Phase 2.
