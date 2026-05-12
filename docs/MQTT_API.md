@@ -75,6 +75,8 @@ Retained. Republished every `heartbeat_interval` seconds.
 |--------|---------|
 | `ok` | Subsystem is running normally |
 | `crashed` | Subsystem threw an unhandled error; it has been contained and stopped. The rest of PxB is still running. |
+| `cooling-down` | Subsystem is crash-looping (4–10 crashes in 60 s); further `onCrash` invocations are suppressed for 60 s. |
+| `quarantined` | Subsystem exceeded the crash budget across multiple cooldown cycles; it is permanently disabled until the next PxB restart. |
 | `fatal` | Reserved for future use (fatal subsystem crash drives process exit before status can be written) |
 
 Subsystem ids follow the convention `<kind>-<label>`, e.g. `light-mirror`, `switch-fogger`, `zwave-driver`.
@@ -115,6 +117,7 @@ Standard codes (phase 1):
 
 Standard codes (fault isolation):
 - `SUBSYSTEM_CRASH` — An optional subsystem threw an uncaught exception or unhandled rejection. The process kept running; the subsystem has been stopped. Payload `context` includes `subsystem_id` (e.g. `light-mirror`) and `kind` (e.g. `output-adapter`). Severity: `error`.
+- `SUBSYSTEM_QUARANTINED` — A subsystem exceeded its crash budget and has been permanently disabled for the lifetime of this process. Payload `context` includes `subsystem_id`, `kind`, `crash_count`, and `window_s`. Severity: `error`.
 
 ## 6. Discovery Notices (`pzb/discovered/<radio>/<id>`)
 

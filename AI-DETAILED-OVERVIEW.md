@@ -35,6 +35,8 @@ src/
     heartbeat.js         # bridge-level status publisher
     node-registry.js     # configured nodes + runtime state
     normalizer.js        # radio payloads → PxB normalized event/state
+    subsystem-registry.js  # crash budget, cooldown, quarantine tracking per subsystem
+    async-context.js       # AsyncLocalStorage wrapper: runInSubsystem / currentSubsystemId
   radios/
     zwave/
       driver.js          # zwave-js lifecycle (startup, interview, reconnect)
@@ -154,11 +156,17 @@ Published every `heartbeat_interval` seconds, retained. Shape:
     "zwave": { "enabled": true, "connected": true, "node_count": 4, "last_error": null },
     "zigbee": { "enabled": false }
   },
-  "nodes": { "total": 4, "ready": 4, "failed": 0 }
+  "nodes": { "total": 4, "ready": 4, "failed": 0 },
+  "subsystems": {
+    "zwave-driver": "ok",
+    "light-mirror": "ok",
+    "light-zone1": "cooling-down"
+  }
 }
 ```
 
 `state ∈ {ok, degraded, error, starting, stopping}`.
+Subsystem status values: `ok | crashed | cooling-down | quarantined | fatal`. See §16 of [docs/SPEC.md](docs/SPEC.md) for crash budget semantics.
 
 ## Command Surface (initial)
 

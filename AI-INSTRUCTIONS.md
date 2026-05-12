@@ -41,6 +41,9 @@ PxB is one of seven Paradox products. It is designed to **replace direct radio h
 - **Generic light zones stay generic**: mixed-vendor `[light-zone:*]` groups are allowed. Do not add vendor-specific grouping layers unless the hardware contract truly requires them.
 - **Best-effort light capability handling**: adapters should apply the parts of a light command they support and publish a warning when asked for an unsupported capability. Do not block mixed-vendor grouping on cross-backend normalization work.
 - **Do not leave dormant feature scaffolding**: if passthrough routing or aggregator behavior is not shipping, remove the dead code/docs instead of parking half-wired abstractions in the repo.
+- **Adapters must use `safeCall` for async surfaces.** Every `setInterval`, `setTimeout`, and MQTT `subscribe` callback inside `src/lights/`, `src/switches/`, and `src/radios/*/events.js` must go through `AdapterBase.safeCall(label, fn)`. Bare timers/listeners in those paths are blocked by an ESLint `no-restricted-syntax` rule. If you need a bare timer for a good reason (e.g. a promise-wrapping delay), add an `// eslint-disable-next-line no-restricted-syntax -- <reason>` comment.
+- **New adapters require `_subsystemId` and registry registration.** Before calling `adapter.init()` from `src/index.js`, set `adapter._subsystemId = '<kind>-<label>'` and wire an `onCrash` handler in `src/index.js` that registers the subsystem with `SubsystemRegistry`. Do not skip this for any new adapter.
+- **`SubsystemRegistry` is the single crash containment point.** Do not add parallel try/catch error-routing, custom error-handling timers, or custom re-registration logic outside `src/bridge/subsystem-registry.js`. All crash budget and cooldown logic lives there.
 
 ## Documentation-First Development
 
@@ -57,4 +60,5 @@ Before significant changes, review [docs/SPEC.md](docs/SPEC.md) and [docs/MQTT_A
 | [docs/QUICK_START.md](docs/QUICK_START.md) | Install / first run |
 | [docs/PR_PZB_INITIAL.md](docs/PR_PZB_INITIAL.md) | Phased implementation plan |
 | [README.md](README.md) | User-facing overview |
+| [docs/PR_FAULT_ISOLATION.md](docs/PR_FAULT_ISOLATION.md) | Subsystem fault isolation design — crash budget, cooldown, quarantine |
 | Parent system: [/opt/paradox/AI-INSTRUCTIONS.md](/opt/paradox/AI-INSTRUCTIONS.md) | System-wide context (when present) |

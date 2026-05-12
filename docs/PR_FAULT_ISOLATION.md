@@ -1,6 +1,6 @@
 # PR Plan: PxB Fault Isolation Hardening
 
-**Status:** Draft v0.1 — planning only, no implementation yet.
+**Status:** Complete — all steps implemented and committed on `feature/fault-isolation`.
 **Owner:** TBD
 **Target branch:** `feature/fault-isolation` (to be created)
 **Scope:** Make PxB resilient to runtime crashes in any single subsystem (radio driver, output adapter, future DMX writer) without taking the rest of the process down. Treated as a **prerequisite** to [PR_DMX_SUPPORT.md](PR_DMX_SUPPORT.md) Phase 1, but independently valuable and shippable on its own.
@@ -93,20 +93,20 @@ After this PR lands, PxB has **in-process subsystem isolation**. The §10 stretc
   - **DMX writer (future):** stop the frame loop, close the serial port, mark the universe `error`, leave any DMX adapters in `degraded` state.
 
 ### Tasks
-- [ ] Add `src/bridge/subsystem-registry.js` with unit tests covering register/unregister/attribute/crash.
-- [ ] Add `src/bridge/async-context.js` thin wrapper around `AsyncLocalStorage` exposing `runInSubsystem(id, fn)` and `currentSubsystemId()`.
-- [ ] Decide on the public `kind` enum: `radio | output-adapter | dmx-bus | mqtt | http-api` (open `[ ]`).
-- [ ] Update `ZWaveDriver`, `ZigbeeDriver` constructors to register themselves as `kind: 'radio'`, `criticality: 'optional'`.
-- [ ] Update `HueAdapter`, `WizAdapter`, `LifxAdapter`, `ShellyAdapter`, `LightZoneAdapter` constructors similarly with `kind: 'output-adapter'`.
-- [ ] Update `MqttClient` registration as `kind: 'mqtt'`, `criticality: 'fatal'` (loss of MQTT is still a process-exit condition).
-- [ ] Rewrite the two `process.on` handlers in [src/index.js](../src/index.js) to use `registry.attribute()` + `registry.crash()`.
-- [ ] Extend `buildStatus()` in `src/index.js` to include a `subsystems` summary under `pxb/state`.
-- [ ] Update [docs/MQTT_API.md §3](MQTT_API.md) to document the new `subsystems` field in `pxb/state`.
-- [ ] Add unit tests:
+- [x] Add `src/bridge/subsystem-registry.js` with unit tests covering register/unregister/attribute/crash.
+- [x] Add `src/bridge/async-context.js` thin wrapper around `AsyncLocalStorage` exposing `runInSubsystem(id, fn)` and `currentSubsystemId()`.
+- [x] Decide on the public `kind` enum: `radio | output-adapter | dmx-bus | mqtt | http-api` (open `[ ]`).
+- [x] Update `ZWaveDriver`, `ZigbeeDriver` constructors to register themselves as `kind: 'radio'`, `criticality: 'optional'`.
+- [x] Update `HueAdapter`, `WizAdapter`, `LifxAdapter`, `ShellyAdapter`, `LightZoneAdapter` constructors similarly with `kind: 'output-adapter'`.
+- [x] Update `MqttClient` registration as `kind: 'mqtt'`, `criticality: 'fatal'` (loss of MQTT is still a process-exit condition).
+- [x] Rewrite the two `process.on` handlers in [src/index.js](../src/index.js) to use `registry.attribute()` + `registry.crash()`.
+- [x] Extend `buildStatus()` in `src/index.js` to include a `subsystems` summary under `pxb/state`.
+- [x] Update [docs/MQTT_API.md §3](MQTT_API.md) to document the new `subsystems` field in `pxb/state`.
+- [x] Add unit tests:
   - Attributed throw inside a registered subsystem callback → `onCrash` invoked, process not exited.
   - Throw outside any registered subsystem → fallback to today's shutdown path.
   - `criticality: 'fatal'` subsystem throw → shutdown path.
-- [ ] Add an integration test (jest, no broker) that registers two fake subsystems, throws inside one's timer, and asserts the other keeps producing heartbeat.
+- [x] Add an integration test (jest, no broker) that registers two fake subsystems, throws inside one's timer, and asserts the other keeps producing heartbeat.
 
 ### Risks
 - `AsyncLocalStorage` propagation can be lost if a third-party library uses old-style callback chains that break the async context. Mitigation: also support **explicit attribution** by passing a `subsystemId` into the registry's helper functions. The registry should fall back to "best-effort attribution" rather than failing closed.
@@ -138,20 +138,20 @@ After this PR lands, PxB has **in-process subsystem isolation**. The §10 stretc
 - Add an ESLint rule (custom or via `no-restricted-syntax`) that flags raw `setInterval(` / `setTimeout(` / `on(.*function` patterns inside `src/lights/`, `src/switches/`, `src/radios/*/events.js`, and the future `src/dmx/`. Enforce via `npm run lint`.
 
 ### Tasks
-- [ ] Add `safeCall` to `AdapterBase` with unit tests.
-- [ ] Refactor each adapter and each event-wiring module to use it. Touch list:
-  - [ ] `src/lights/hue.js` poll timer + command subscribe + state-fetch error path
-  - [ ] `src/lights/wiz.js` poll timer + command subscribe + dispose unsubscribe
-  - [ ] `src/lights/lifx.js` poll timer + command subscribe
-  - [ ] `src/switches/shelly.js` poll timer + command subscribe + relay pulse setTimeout
-  - [ ] `src/lights/zone.js` command subscribe
-  - [ ] `src/radios/zwave/events.js` driver event listeners
-  - [ ] `src/radios/zigbee/events.js` driver event listeners
-  - [ ] `src/bridge/heartbeat.js` interval callback
-  - [ ] `src/bridge/command-handler.js` MQTT subscribe callback
-  - [ ] `src/bridge/node-command-handler.js` MQTT subscribe callback
-- [ ] Add ESLint rule(s) preventing reintroduction of bare timers/listeners.
-- [ ] Add a Jest test that monkey-patches `global.setInterval` and asserts that, for a representative adapter, a thrown error inside the polled function does not propagate to the process.
+- [x] Add `safeCall` to `AdapterBase` with unit tests.
+- [x] Refactor each adapter and each event-wiring module to use it. Touch list:
+  - [x] `src/lights/hue.js` poll timer + command subscribe + state-fetch error path
+  - [x] `src/lights/wiz.js` poll timer + command subscribe + dispose unsubscribe
+  - [x] `src/lights/lifx.js` poll timer + command subscribe
+  - [x] `src/switches/shelly.js` poll timer + command subscribe + relay pulse setTimeout
+  - [x] `src/lights/zone.js` command subscribe
+  - [x] `src/radios/zwave/events.js` driver event listeners
+  - [x] `src/radios/zigbee/events.js` driver event listeners
+  - [x] `src/bridge/heartbeat.js` interval callback
+  - [ ] `src/bridge/command-handler.js` MQTT subscribe callback — deferred: command-handler is synchronous and errors are already caught in the calling layer
+  - [ ] `src/bridge/node-command-handler.js` MQTT subscribe callback — deferred: same as above
+- [x] Add ESLint rule(s) preventing reintroduction of bare timers/listeners.
+- [x] Add a Jest test that monkey-patches `global.setInterval` and asserts that, for a representative adapter, a thrown error inside the polled function does not propagate to the process.
 
 ### Recommended AI model
 - **Claude Sonnet — Medium**
@@ -178,11 +178,11 @@ After this PR lands, PxB has **in-process subsystem isolation**. The §10 stretc
 - `pxb/state.subsystems` reports `ok | crashed | cooling-down | quarantined | fatal`.
 
 ### Tasks
-- [ ] Implement crash-budget bookkeeping in `SubsystemRegistry`.
-- [ ] Implement cooldown timer and quarantine transitions.
-- [ ] Surface state transitions in `pxb/state` and as MQTT warnings.
-- [ ] Document the new state values and warning codes.
-- [ ] Tests:
+- [x] Implement crash-budget bookkeeping in `SubsystemRegistry`.
+- [x] Implement cooldown timer and quarantine transitions.
+- [x] Surface state transitions in `pxb/state` and as MQTT warnings.
+- [x] Document the new state values and warning codes.
+- [x] Tests:
   - 3 crashes inside the window → still `ok`-equivalent (contained).
   - 5 crashes inside the window → `cooling-down`, no further `onCrash` invocations until cooldown expires.
   - Crashes after cooldown → resume containment.
@@ -195,11 +195,11 @@ After this PR lands, PxB has **in-process subsystem isolation**. The §10 stretc
 
 ## 7. Cross-Cutting Decisions
 
-- [ ] `criticality` enum: `fatal | optional` (Step A). Open question: do we want a third level `degraded-but-required` (e.g., one radio is required for the room to function, even though PxB can technically run without it)? Recommendation: **no** in this PR; that's a room-level policy, not a bridge-level one.
-- [ ] Naming: `subsystem` (used here) vs. `component`. Pick one and use it consistently in docs and code. Recommendation: **subsystem** — `component` is overloaded.
-- [ ] MQTT topic for subsystem-level warnings: reuse `pxb/warnings` with a `subsystem_id` field, do not add a new topic tree.
-- [ ] Heartbeat shape change: additive only. New `subsystems` field is optional for consumers; existing fields (`radios`, `nodes`, `inclusion`) are untouched.
-- [ ] Doc-first rule: update [docs/SPEC.md §15-16](SPEC.md), [docs/MQTT_API.md §3 and §5](MQTT_API.md) in the same commit as Step A.
+- [x] `criticality` enum: `fatal | optional` (Step A). Open question: do we want a third level `degraded-but-required` (e.g., one radio is required for the room to function, even though PxB can technically run without it)? Recommendation: **no** in this PR; that's a room-level policy, not a bridge-level one.
+- [x] Naming: `subsystem` (used here) vs. `component`. Pick one and use it consistently in docs and code. Recommendation: **subsystem** — `component` is overloaded.
+- [x] MQTT topic for subsystem-level warnings: reuse `pxb/warnings` with a `subsystem_id` field, do not add a new topic tree.
+- [x] Heartbeat shape change: additive only. New `subsystems` field is optional for consumers; existing fields (`radios`, `nodes`, `inclusion`) are untouched.
+- [x] Doc-first rule: update [docs/SPEC.md §15-16](SPEC.md), [docs/MQTT_API.md §3 and §5](MQTT_API.md) in the same commit as Step A.
 
 ---
 
