@@ -1,3 +1,7 @@
+'use strict';
+
+const { runInSubsystem } = require('./bridge/async-context');
+
 /**
  * AdapterBase — Abstract base class for all I/O domain adapters.
  *
@@ -40,6 +44,8 @@ class AdapterBase {
         this.mqttClient = mqttClient;
         this.logger = logger;
         this._disposed = false;
+        /** Set by index.js to the registry subsystem id for this adapter. */
+        this._subsystemId = null;
     }
 
     /**
@@ -135,6 +141,36 @@ class AdapterBase {
         const topic = `${this.config.topic}/events`;
         const msg = { event, timestamp: new Date().toISOString(), ...payload };
         this.mqttClient.publish(topic, JSON.stringify(msg), { retain: false });
+    }
+
+    /**
+     * Execute fn safely: catch any synchronous or asynchronous error before it
+     * reaches the process uncaughtException handler, log it, and optionally
+     * publish a warning to {topic}/warnings.
+     *
+     * Also re-enters the subsystem AsyncLocalStorage context (when _subsystemId
+     * is set) so that any error that *does* escape into the global handler is
+     * correctly attributed.
+     *
+     * @param {string}   label          - Short label used in log / warning messages
+     * @param {function} fn             - Sync or async function to run safely
+     * @param {object}   [options]
+     * @param {string}   [options.onError='warn'] - 'warn' | 'silent' | 'rethrow'
+     * @returns {Promise<*>}
+     */
+    async safeCall(label, fn, { onError = 'warn' } = {}) {
+        const run = this._subsystemId
+            ? () => runInSubsystem(this._subsystemId, fn)
+            : fn;
+        try {
+            return await run();
+        } catch (err) {
+            if (onError === 'rethrow') throw err;
+            if (onError !== 'silent') {
+                this.logger.warn(`${this.name}:${label} error: ${err.message}`);
+                this.publishWarning('SAFE_CALL_ERROR', `${label}: ${err.message}`, { label });
+            }
+        }
     }
 
     /**

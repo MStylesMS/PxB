@@ -116,11 +116,8 @@ class HueAdapter extends AdapterBase {
 
         // Subscribe to command topic
         const commandTopic = `${this.config.topic}/commands`;
-        this.mqttClient.subscribe(commandTopic, (msg) => {
-            this._handleCommand(msg).catch((err) => {
-                this.logger.error(`HueAdapter: Command handler error: ${err.message}`);
-            });
-        });
+        this.mqttClient.subscribe(commandTopic, (msg) =>
+            this.safeCall('command', () => this._handleCommand(msg)));
         this._subscribed = true;
         this.logger.info(`HueAdapter: Subscribed to ${commandTopic}`);
 
@@ -128,11 +125,9 @@ class HueAdapter extends AdapterBase {
         this._publishState();
 
         // Start polling for state updates every 5s
-        this.updateTimer = setInterval(() => {
-            this._pollState().catch((err) => {
-                this.logger.warn(`HueAdapter: Poll error: ${err.message}`);
-            });
-        }, 5000);
+        // eslint-disable-next-line no-restricted-syntax -- safeCall wraps this callback
+        this.updateTimer = setInterval(() =>
+            this.safeCall('poll', () => this._pollState()), 5000);
 
         this.logger.info('HueAdapter: Initialized');
     }

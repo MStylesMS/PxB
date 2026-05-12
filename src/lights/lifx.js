@@ -81,20 +81,15 @@ class LifxAdapter extends AdapterBase {
         }
 
         const commandTopic = `${this.config.topic}/commands`;
-        this.mqttClient.subscribe(commandTopic, (msg) => {
-            this._handleCommand(msg).catch((err) => {
-                this.logger.error(`LifxAdapter: Command handler error: ${err.message}`);
-            });
-        });
+        this.mqttClient.subscribe(commandTopic, (msg) =>
+            this.safeCall('command', () => this._handleCommand(msg)));
         this._subscribed = true;
 
         this._publishState();
 
-        this.updateTimer = setInterval(() => {
-            this._pollState().catch((err) => {
-                this.logger.warn(`LifxAdapter: Poll error: ${err.message}`);
-            });
-        }, 5000);
+        // eslint-disable-next-line no-restricted-syntax -- safeCall wraps this callback
+        this.updateTimer = setInterval(() =>
+            this.safeCall('poll', () => this._pollState()), 5000);
 
         this.logger.info('LifxAdapter: Initialized');
     }

@@ -3,6 +3,7 @@
 const logger = require('../../util/logger');
 const { normalizeZigbeeContact, normalizeZigbeeBattery } = require('../../bridge/normalizer');
 const { nodeTopics } = require('../../mqtt/contract');
+const { runInSubsystem } = require('../../bridge/async-context');
 
 /**
  * ZigbeeEvents — mirrors `ZWaveEvents` for the Zigbee radio.
@@ -27,12 +28,30 @@ class ZigbeeEvents {
         this._registry = nodeRegistry;
         this._mqtt = mqttClient;
 
-        this._driver.on('zigbee-message', (ev) => this._onMessage(ev));
-        this._driver.on('zigbee-device-announce', ({ ieee }) => this._onReachable(ieee, true));
-        this._driver.on('zigbee-device-left', ({ ieee }) => this._onReachable(ieee, false));
-        this._driver.on('zigbee-device-interview', (ev) => this._onInterview(ev));
-        this._driver.on('connected', () => this._onDriverConnected());
-        this._driver.on('disconnected', () => this._onDriverDisconnected());
+        this._driver.on('zigbee-message', (ev) => {
+            try { runInSubsystem('zigbee-driver', () => this._onMessage(ev)); }
+            catch (err) { logger.error(`ZigbeeEvents: message handler error: ${err.message}`); }
+        });
+        this._driver.on('zigbee-device-announce', ({ ieee }) => {
+            try { runInSubsystem('zigbee-driver', () => this._onReachable(ieee, true)); }
+            catch (err) { logger.error(`ZigbeeEvents: device-announce handler error: ${err.message}`); }
+        });
+        this._driver.on('zigbee-device-left', ({ ieee }) => {
+            try { runInSubsystem('zigbee-driver', () => this._onReachable(ieee, false)); }
+            catch (err) { logger.error(`ZigbeeEvents: device-left handler error: ${err.message}`); }
+        });
+        this._driver.on('zigbee-device-interview', (ev) => {
+            try { runInSubsystem('zigbee-driver', () => this._onInterview(ev)); }
+            catch (err) { logger.error(`ZigbeeEvents: device-interview handler error: ${err.message}`); }
+        });
+        this._driver.on('connected', () => {
+            try { runInSubsystem('zigbee-driver', () => this._onDriverConnected()); }
+            catch (err) { logger.error(`ZigbeeEvents: connected handler error: ${err.message}`); }
+        });
+        this._driver.on('disconnected', () => {
+            try { runInSubsystem('zigbee-driver', () => this._onDriverDisconnected()); }
+            catch (err) { logger.error(`ZigbeeEvents: disconnected handler error: ${err.message}`); }
+        });
 
         this._publishAllSchemas();
     }

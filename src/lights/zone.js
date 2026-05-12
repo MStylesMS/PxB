@@ -19,11 +19,8 @@ class LightZoneAdapter extends AdapterBase {
         }
 
         const commandTopic = `${this.config.topic}/commands`;
-        this.mqttClient.subscribe(commandTopic, (topic, message) => {
-            this._handleCommand(message).catch((err) => {
-                this.logger.error(`LightZoneAdapter: command handler error: ${err.message}`);
-            });
-        });
+        this.mqttClient.subscribe(commandTopic, (topic, message) =>
+            this.safeCall('command', () => this._handleCommand(message)));
         this._subscribed = true;
 
         this._publishState();

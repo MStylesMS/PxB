@@ -86,17 +86,16 @@ class WizAdapter extends AdapterBase {
         }
 
         const commandTopic = `${this.config.topic}/commands`;
-        this.mqttClient.subscribe(commandTopic, (msg) => {
-            this._handleCommand(msg).catch((err) => {
-                this.logger.error(`WizAdapter: Command handler error: ${err.message}`);
-            });
-        });
+        this.mqttClient.subscribe(commandTopic, (msg) =>
+            this.safeCall('command', () => this._handleCommand(msg)));
         this._subscribed = true;
 
         this._publishState();
 
-        this.updateTimer = setInterval(() => {
-            this._fetchState().then((s) => {
+        // eslint-disable-next-line no-restricted-syntax -- safeCall wraps this callback
+        this.updateTimer = setInterval(() => this.safeCall('poll', async () => {
+            try {
+                const s = await this._fetchState();
                 this.state = s;
                 if (this._connectivity !== 'online') {
                     this._connectivity = 'online';
@@ -104,15 +103,15 @@ class WizAdapter extends AdapterBase {
                     this.logger.info(`WizAdapter: ${this.host} recovered`);
                 }
                 this._publishState();
-            }).catch((err) => {
+            } catch (err) {
                 this._pollFailCount++;
                 this.logger.warn(`WizAdapter: Poll failed (${this._pollFailCount}): ${err.message}`);
                 if (this._pollFailCount >= 3 && this._connectivity !== 'degraded') {
                     this._connectivity = 'degraded';
                     this._publishDegraded(err.message);
                 }
-            });
-        }, 5000);
+            }
+        }), 5000);
 
         this.logger.info('WizAdapter: Initialized');
     }
@@ -341,6 +340,7 @@ class WizAdapter extends AdapterBase {
             const socket = dgram.createSocket('udp4');
             const data = Buffer.from(JSON.stringify(message));
 
+            // eslint-disable-next-line no-restricted-syntax -- internal UDP timeout, errors routed via reject
             const timer = setTimeout(() => {
                 socket.close();
                 reject(new Error(`UDP timeout (${this.timeoutMs}ms) sending to ${this.host}:${this.port}`));

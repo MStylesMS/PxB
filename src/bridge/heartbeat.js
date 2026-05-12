@@ -21,7 +21,10 @@ class Heartbeat {
     start() {
         if (this._timer) return;
         this._publish();
-        this._timer = setInterval(() => this._publish(), this._interval);
+        this._timer = setInterval(() => {
+            try { this._publish(); }
+            catch (err) { logger.error(`Heartbeat publish error: ${err.message}`); }
+        }, this._interval);
         logger.info(`Heartbeat started — publishing to ${this._topic} every ${this._interval / 1000}s`);
     }
 

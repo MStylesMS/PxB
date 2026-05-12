@@ -3,6 +3,7 @@
 const logger = require('../../util/logger');
 const { normalizeContact, normalizeBattery } = require('../../bridge/normalizer');
 const { nodeTopics } = require('../../mqtt/contract');
+const { runInSubsystem } = require('../../bridge/async-context');
 
 /**
  * ZWaveEvents — bridges ZWaveDriver node-level events into MQTT publishes.
@@ -27,10 +28,22 @@ class ZWaveEvents {
         this._registry = nodeRegistry;
         this._mqtt = mqttClient;
 
-        this._driver.on('node-value-updated', (ev) => this._onValueUpdated(ev));
-        this._driver.on('node-status-changed', (ev) => this._onStatusChanged(ev));
-        this._driver.on('connected', () => this._onDriverConnected());
-        this._driver.on('disconnected', () => this._onDriverDisconnected());
+        this._driver.on('node-value-updated', (ev) => {
+            try { runInSubsystem('zwave-driver', () => this._onValueUpdated(ev)); }
+            catch (err) { logger.error(`ZWaveEvents: value-updated handler error: ${err.message}`); }
+        });
+        this._driver.on('node-status-changed', (ev) => {
+            try { runInSubsystem('zwave-driver', () => this._onStatusChanged(ev)); }
+            catch (err) { logger.error(`ZWaveEvents: status-changed handler error: ${err.message}`); }
+        });
+        this._driver.on('connected', () => {
+            try { runInSubsystem('zwave-driver', () => this._onDriverConnected()); }
+            catch (err) { logger.error(`ZWaveEvents: connected handler error: ${err.message}`); }
+        });
+        this._driver.on('disconnected', () => {
+            try { runInSubsystem('zwave-driver', () => this._onDriverDisconnected()); }
+            catch (err) { logger.error(`ZWaveEvents: disconnected handler error: ${err.message}`); }
+        });
 
         // Publish schemas at startup. If MQTT isn't connected yet, the driver
         // 'connected' handler will republish; we skip quietly here to avoid a

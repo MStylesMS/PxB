@@ -55,4 +55,28 @@ module.exports = [
             'no-unused-vars': 'off',
         },
     },
+    // Adapter source directories must wrap timer and event-listener callbacks
+    // with this.safeCall() or runInSubsystem() — never register bare callbacks
+    // that can silently propagate errors to the process uncaughtException handler.
+    {
+        files: [
+            'src/lights/**/*.js',
+            'src/switches/**/*.js',
+            'src/radios/zwave/events.js',
+            'src/radios/zigbee/events.js',
+        ],
+        rules: {
+            'no-restricted-syntax': [
+                'error',
+                {
+                    selector: 'CallExpression[callee.name="setInterval"]',
+                    message: 'Wrap setInterval callbacks with this.safeCall() in adapter files.',
+                },
+                {
+                    selector: 'CallExpression[callee.name="setTimeout"]',
+                    message: 'Wrap setTimeout callbacks with this.safeCall() in adapter files.',
+                },
+            ],
+        },
+    },
 ];

@@ -385,6 +385,7 @@ async function main() {
                     throw new Error(`Unsupported light backend: ${lightConfig.backend}`);
             }
 
+            adapter._subsystemId = `light-${label}`;
             await adapter.init();
             domainAdapters.lights.set(label, adapter);
             logger.info(`Light adapter '${label}' initialized (${lightConfig.backend})`);
@@ -445,6 +446,7 @@ async function main() {
                 logger,
                 memberAdapters: members,
             });
+            zoneAdapter._subsystemId = `light-zone-${label}`;
             await zoneAdapter.init();
 
             domainAdapters.lights.set(label, zoneAdapter);
@@ -493,6 +495,7 @@ async function main() {
                     throw new Error(`Unsupported switch backend: ${switchConfig.backend}`);
             }
 
+            adapter._subsystemId = `switch-${label}`;
             await adapter.init();
             domainAdapters.switches.set(label, adapter);
             logger.info(`Switch adapter '${label}' initialized (${switchConfig.backend})`);
