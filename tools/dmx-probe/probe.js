@@ -23,10 +23,8 @@ const { SerialPort } = require('serialport');
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const UNIVERSE_SIZE   = 512;          // DMX slots per frame
-const FRAME_HZ        = 30;           // target frame rate
+const FRAME_HZ        = 30;           // target frame rate (baud-switch overhead will lower actual Hz)
 const FRAME_MS        = 1000 / FRAME_HZ;
-const BREAK_MS        = 1;            // BREAK duration (spec ≥ 88 µs; 1 ms >> safe)
-const MAB_MS          = 1;            // Mark-after-break (spec ≥ 8 µs; 1 ms >> safe)
 const STEP_DURATION_S = 3;            // seconds per colour step
 const TOTAL_STEPS     = 7;            // number of colour steps (see sequence below)
 const LOAD_SOAK_S     = 30;           // seconds to keep last step while user runs stress
@@ -70,20 +68,43 @@ function setChannels(channelMap) {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function sendFrame(port) {
-  // BREAK
-  await port.set({ brk: true });
-  await sleep(BREAK_MS);
-  // Mark-after-break
-  await port.set({ brk: false });
-  await sleep(MAB_MS);
-  // Start code + data
-  await new Promise((resolve, reject) => {
-    port.write(frame, (err) => {
+function openPort(path, baudRate, stopBits) {
+  const p = new SerialPort({ path, baudRate, dataBits: 8, stopBits, parity: 'none', autoOpen: false });
+  return new Promise((resolve, reject) => p.open((err) => err ? reject(err) : resolve(p)));
+}
+
+function closePort(p) {
+  return new Promise((resolve, reject) => {
+    p.drain((err) => {
       if (err) return reject(err);
-      port.drain(resolve);
+      p.close(resolve);
     });
   });
+}
+
+function writeAndDrain(p, buf) {
+  return new Promise((resolve, reject) => {
+    p.write(buf, (err) => {
+      if (err) return reject(err);
+      p.drain(resolve);
+    });
+  });
+}
+
+// BREAK via baud-rate switch (Open DMX method — reliable on FTDI FT232R + Linux)
+//
+// One 0x00 byte at 76800 baud 8N1 holds the line LOW for ~104 µs (> 88 µs spec).
+// Re-opening at 250000 baud leaves TX idle (HIGH) — that IS the MAB.
+// port.set({brk:true/false}) is NOT used: it is unreliable with the ftdi_sio
+// driver on this Pi and produces only occasional valid frames.
+async function sendFrame(devicePath) {
+  const brkPort = await openPort(devicePath, 76800, 1);
+  await writeAndDrain(brkPort, Buffer.from([0x00]));
+  await closePort(brkPort);
+
+  const dmxPort = await openPort(devicePath, 250000, 2);
+  await writeAndDrain(dmxPort, frame);
+  await closePort(dmxPort);
 }
 
 async function findFtdiDevice() {
@@ -120,20 +141,10 @@ async function findFtdiDevice() {
     console.log(`Found FTDI device at: ${devicePath}`);
   }
 
-  console.log(`\nOpening ${devicePath} at 250000 baud, 8N2...`);
-  const port = new SerialPort({
-    path: devicePath,
-    baudRate: 250000,
-    dataBits: 8,
-    stopBits: 2,
-    parity: 'none',
-    autoOpen: false,
-  });
-
-  await new Promise((resolve, reject) => port.open((err) => (err ? reject(err) : resolve())));
-  console.log('Port open. Starting DMX output.\n');
+  console.log(`\nUsing ${devicePath} — baud-switch BREAK method (Open DMX)`);
+  console.log('Starting DMX output.\n');
   console.log('Fixture: 6-CH RGBW LED PAR at DMX address 1 in 6CH mode.');
-  console.log(`Frame rate: ${FRAME_HZ} Hz  |  Step duration: ${STEP_DURATION_S} s\n`);
+  console.log(`Frame rate: ~${FRAME_HZ} Hz  |  Step duration: ${STEP_DURATION_S} s\n`);
 
   let frameCount  = 0;
   let stepIndex   = 0;
@@ -158,7 +169,7 @@ async function findFtdiDevice() {
         if (isLastStep) {
           // All steps done — send all-off and exit
           setChannels({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 });
-          await sendFrame(port);
+          await sendFrame(devicePath);
           running = false;
           break;
         }
@@ -169,13 +180,13 @@ async function findFtdiDevice() {
       }
 
       try {
-        await sendFrame(port);
+        await sendFrame(devicePath);
         frameCount++;
       } catch (err) {
         console.error(`Frame send error (frame ${frameCount}):`, err.message);
       }
 
-      // Pace to FRAME_HZ
+      // Pace to FRAME_HZ — baud-switch overhead means actual Hz will be lower
       const elapsed = Date.now() - loopStart;
       const wait = FRAME_MS - elapsed;
       if (wait > 0) await sleep(wait);
@@ -184,10 +195,10 @@ async function findFtdiDevice() {
 
   // Clean exit on Ctrl+C
   process.on('SIGINT', async () => {
-    console.log('\n\nSIGINT — sending all-off and closing port...');
+    console.log('\n\nSIGINT — sending all-off...');
     setChannels({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 });
     try {
-      await sendFrame(port);
+      await sendFrame(devicePath);
     } catch (_) { /* ignore */ }
     running = false;
   });
@@ -199,10 +210,7 @@ async function findFtdiDevice() {
   const avgFps  = (frameCount / parseFloat(totalS)).toFixed(1);
 
   console.log(`\nDone. Frames sent: ${frameCount}  Time: ${totalS} s  Avg FPS: ${avgFps}`);
-
-  await new Promise((resolve) => port.close(resolve));
-  console.log('Port closed.\n');
-  console.log('─── Record these results in docs/pending/PR_DMX_SUPPORT.md Phase 0 ───');
+  console.log('\n─── Record these results in docs/pending/PR_DMX_SUPPORT.md Phase 0 ───');
   console.log(`  Date            : ${new Date().toISOString().slice(0,10)}`);
   console.log(`  Device          : ${devicePath}`);
   console.log(`  Avg FPS         : ${avgFps}`);
