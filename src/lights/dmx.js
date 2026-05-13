@@ -29,7 +29,7 @@ const DEFAULT_SCENE_MAP = {
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, Math.round(v))); }
 
 const FADE_HZ        = 30;
-const MAX_STROBE_HZ  = 25;
+const MAX_STROBE_HZ  = 15;  // max clean rate at 30 Hz frames: 1 frame on + 1 frame off
 const FADE_INTERVAL  = Math.round(1000 / FADE_HZ);  // ~33 ms
 
 // Parse a color from the command payload.
@@ -465,27 +465,36 @@ class DmxAdapter extends AdapterBase {
         }
         this._cancelStrobe();
 
+        // Quantize to frame boundaries: each on/off phase is an integer number
+        // of FADE_INTERVAL (~33 ms) ticks so transitions land exactly on a
+        // DMX frame send rather than falling between frames.
+        const totalFrames = Math.max(2, Math.round(FADE_HZ / hz));
+        const onFrames    = Math.max(1, Math.round(totalFrames * duty / 100));
+        const offFrames   = Math.max(1, totalFrames - onFrames);
+        const actualHz    = FADE_HZ / (onFrames + offFrames);
+
         this._state.strobing   = true;
-        this._state.strobeHz   = hz;
-        this._state.strobeDuty = duty;
+        this._state.strobeHz   = Math.round(actualHz * 100) / 100;
+        this._state.strobeDuty = Math.round(onFrames / (onFrames + offFrames) * 100);
 
-        const periodMs = 1000 / hz;
-        const onMs  = Math.max(1, Math.round(periodMs * duty / 100));
-        const offMs = Math.max(1, Math.round(periodMs * (100 - duty) / 100));
+        let frameCount = 0;
+        let phase = 'on';
+        this._writeStrobeOn(color, brightness);
 
-        const scheduleOff = () => {
-            if (!this._state.strobing) return;
-            this._writeStrobeOff();
-            this._strobeTimer = setTimeout(scheduleOn, offMs);
-        };
+        this._strobeTimer = setInterval(() => {
+            frameCount++;
+            if (phase === 'on' && frameCount >= onFrames) {
+                phase = 'off';
+                frameCount = 0;
+                this._writeStrobeOff();
+            } else if (phase === 'off' && frameCount >= offFrames) {
+                phase = 'on';
+                frameCount = 0;
+                this._writeStrobeOn(color, brightness);
+            }
+        }, FADE_INTERVAL);
 
-        const scheduleOn = () => {
-            if (!this._state.strobing) return;
-            this._writeStrobeOn(color, brightness);
-            this._strobeTimer = setTimeout(scheduleOff, onMs);
-        };
-
-        scheduleOn();
+        this._publishState();
     }
 
     /**

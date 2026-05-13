@@ -683,14 +683,15 @@ describe('DmxAdapter — software strobe', () => {
         await a.init();
         const cb = m._subs['paradox/test/lights/dmx1/commands'];
 
-        await cb('', { command: 'setStrobe', strobeHz: 5, strobeDuty: 40 });
+        // 5 Hz, 50% duty → totalFrames=6, onFrames=3, offFrames=3 (exactly frame-aligned)
+        await cb('', { command: 'setStrobe', strobeHz: 5, strobeDuty: 50 });
         await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
 
         const stateCalls = m.publish.mock.calls.filter(([t]) => t.endsWith('/state'));
         const last = JSON.parse(stateCalls[stateCalls.length - 1][1]);
         expect(last.strobing).toBe(true);
         expect(last.strobeHz).toBe(5);
-        expect(last.strobeDuty).toBe(40);
+        expect(last.strobeDuty).toBe(50);
     });
 });
 
