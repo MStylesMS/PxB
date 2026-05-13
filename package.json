@@ -1,6 +1,6 @@
 {
   "name": "pxb",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Paradox Bridge — Z-Wave / Zigbee / Thread to MQTT bridge",
   "main": "src/index.js",
   "bin": {

@@ -507,13 +507,13 @@ Remaining stretch items (not yet scheduled):
 
 These are decided once, up front, so every phase agrees:
 
-- [ ] **Serial library:** `serialport` (Node), pinned to a major with prebuilt aarch64 binaries.
-- [ ] **Single writer rule:** PxB is the only process opening any DMX serial port. No PFx or room helper may open `/dev/ttyUSB*` for DMX once Phase 1 ships.
-- [ ] **Device access:** udev rule under `config/udev/` granting the `paradox` user access to `0403:6001` without `dialout` membership (so service installs don't need group manipulation).
-- [ ] **Naming:** the universe writer lives under `src/dmx/`, not `src/radios/dmx/`. DMX is not a radio.
-- [ ] **Topic shape:** unchanged — `[light:*]`, `[effect:*]`, `[light-zone:*]` all use the same `{base_topic}/{commands|state|events|warnings}` contract.
-- [ ] **Heartbeat:** add `radios.dmx` (or a sibling key `buses.dmx`) with `{ enabled, connected, port, interface, refresh_hz, frame_count, last_error }`. Decide before Phase 1.
-- [ ] **Doc-first rule:** every phase updates `docs/SPEC.md`, `docs/CONFIG_INI.md`, and `docs/MQTT_API.md` in the same commit as the implementation (PxB methodology).
+- [x] **Serial library:** `serialport` v12, pinned. Prebuilt aarch64 binaries confirmed on Pi5.
+- [x] **Single writer rule:** only `src/dmx/universe.js` opens a DMX serial port. No other process or module may open `/dev/ttyUSB*` for DMX.
+- [x] **Device access:** `config/udev/99-ftdi-dmx.rules` grants the `paradox` user access to `0403:6001` without `dialout` membership.
+- [x] **Naming:** universe writer lives under `src/dmx/`, fixtures under `src/lights/`, effects under `src/effects/`. Not under `src/radios/`.
+- [x] **Topic shape:** all DMX zones use `{base_topic}/{commands|state|events|warnings}`. No changes needed.
+- [x] **Heartbeat:** DMX universes appear as a top-level `dmx` key (sibling to `radios`, not nested inside it) with shape `dmx.<label> → { enabled, connected, port, interface, refresh_hz, frame_count, last_error }`. Rationale: DMX is a wired bus, not a radio — mixing them under `radios` would conflate heterogeneous shapes. Key chosen: `dmx.<label>`.
+- [x] **Doc-first rule:** every phase updates `docs/SPEC.md`, `docs/CONFIG_INI.md`, and `docs/MQTT_API.md` in the same commit as the implementation.
 
 ---
 
