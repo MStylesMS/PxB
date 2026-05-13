@@ -162,9 +162,9 @@ describe('built-in profiles', () => {
     test('listProfiles returns all 8 built-ins', () => {
         const profiles = listProfiles();
         const names = Object.keys(profiles);
-        expect(names).toHaveLength(12);
+        expect(names).toHaveLength(14);
         for (const n of ['dimmer', 'rgb', 'rgbw', 'rgba', 'rgbaw', 'rgbawuv', 'par-7ch', 'mover-basic',
-            'fogger-1ch', 'fogger-2ch', 'strobe-2ch', 'hazer-2ch']) {
+            'fogger-1ch', 'fogger-2ch', 'strobe-2ch', 'hazer-2ch', 'mover-8ch', 'mover-12ch']) {
             expect(names).toContain(n);
         }
     });

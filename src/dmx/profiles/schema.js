@@ -39,7 +39,7 @@ const VALID_SLOTS = new Set([
     'strobe',
     'mode',
     'speed',
-    'pan', 'tilt',
+    'pan', 'tilt', 'pan_fine', 'tilt_fine',
     'gobo',
 ]);
 

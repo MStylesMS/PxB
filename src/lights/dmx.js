@@ -48,11 +48,14 @@ function parseColor(colorVal) {
  * Config keys:
  *   topic      — MQTT topic for this fixture
  *   fixture    — profile name: dimmer | rgb | rgbw | rgba | rgbaw | rgbawuv |
- *                par-7ch | mover-basic | custom
+ *                par-7ch | mover-basic | mover-8ch | mover-12ch | custom
  *   channels   — required when fixture = custom; e.g. "dimmer:1,red:2,green:3,blue:4"
  *   address    — DMX start address, 1-based (default 1)
  *   brightness — default brightness 0–100 (default 100)
- *   scene_map — optional INI-encoded JSON overrides for colour scenes
+ *   scene_map  — optional INI-encoded JSON overrides for colour scenes
+ *   positions  — optional INI-encoded JSON map of named pan/tilt positions,
+ *                e.g. '{"home":{"pan":128,"tilt":64},"door":{"pan":200,"tilt":90}}'
+ *                Applicable only when fixture has 'pan' capability.
  *
  * Unsupported commands: `fade`, `setColorTemp` — published as structured warnings,
  * never silently dropped. Documented in docs/MQTT_API.md §9a.
@@ -94,12 +97,15 @@ class DmxAdapter extends AdapterBase {
         this._caps = new Set(profile.capabilities);
 
         this._sceneMap = { ...DEFAULT_SCENE_MAP, ...this._parseSceneMap(config.scene_map) };
+        this._positions = this._parsePositions(config.positions);
 
         this._state = {
             on:         false,
             brightness: 0,
             color:      null,
             scene:      null,
+            pan:        null,
+            tilt:       null,
         };
 
         this._subscribed = false;
@@ -220,6 +226,24 @@ class DmxAdapter extends AdapterBase {
                         { command: action }
                     );
                     break;
+
+                case 'moveTo': {
+                    this._requireCapability('pan', 'moveTo');
+                    const target = this._resolvePosition(payload);
+                    if (target) {
+                        this._applyPosition(target.pan, target.tilt, target.speed ?? 0);
+                        this.publishEvent('moved', { pan: target.pan, tilt: target.tilt });
+                    }
+                    break;
+                }
+
+                case 'home': {
+                    this._requireCapability('pan', 'home');
+                    const hp = this._positions['home'];
+                    this._applyPosition(hp.pan, hp.tilt, hp.speed ?? 0);
+                    this.publishEvent('moved', { pan: hp.pan, tilt: hp.tilt });
+                    break;
+                }
 
                 default:
                     this.publishWarning('DMX_CMD_UNKNOWN', `Unknown command: "${action}"`, { command: action });
@@ -368,7 +392,7 @@ class DmxAdapter extends AdapterBase {
     }
 
     _publishState() {
-        this.publishState({
+        const s = {
             timestamp:  new Date().toISOString(),
             on:         this._state.on,
             brightness: this._state.brightness,
@@ -376,7 +400,12 @@ class DmxAdapter extends AdapterBase {
             scene:      this._state.scene,
             fixture:    this._profileName,
             address:    this._address,
-        });
+        };
+        if (this._caps.has('pan')) {
+            s.pan  = this._state.pan;
+            s.tilt = this._state.tilt;
+        }
+        this.publishState(s);
     }
 
     _parseSceneMap(raw) {
@@ -387,6 +416,58 @@ class DmxAdapter extends AdapterBase {
             this.logger.warn('DmxAdapter: scene_map could not be parsed as JSON; using default scenes only');
             return {};
         }
+    }
+
+    _parsePositions(raw) {
+        const defaults = { home: { pan: 128, tilt: 128 } };
+        if (!raw) return defaults;
+        try {
+            return { ...defaults, ...JSON.parse(raw) };
+        } catch {
+            this.logger.warn('DmxAdapter: positions could not be parsed as JSON; using default home position only');
+            return defaults;
+        }
+    }
+
+    /**
+     * Resolve a moveTo payload to a {pan, tilt, speed} object.
+     * Returns null and publishes a warning if the position cannot be resolved.
+     */
+    _resolvePosition(payload) {
+        if (payload.position !== undefined) {
+            const p = this._positions[payload.position];
+            if (!p) {
+                this.publishWarning('DMX_POSITION_UNKNOWN',
+                    `Position "${payload.position}" not found. Defined: ${Object.keys(this._positions).join(', ')}`,
+                    { position: payload.position });
+                return null;
+            }
+            return { pan: p.pan, tilt: p.tilt, speed: p.speed ?? 0 };
+        }
+        if (payload.pan === undefined && payload.tilt === undefined) {
+            this.publishWarning('DMX_CMD_INVALID',
+                'moveTo requires either a "position" name or explicit "pan"/"tilt" values');
+            return null;
+        }
+        return {
+            pan:   payload.pan  !== undefined ? clamp(payload.pan,  0, 255) : (this._state.pan  ?? 128),
+            tilt:  payload.tilt !== undefined ? clamp(payload.tilt, 0, 255) : (this._state.tilt ?? 128),
+            speed: payload.speed !== undefined ? clamp(payload.speed, 0, 255) : 0,
+        };
+    }
+
+    /** Write pan/tilt (and fine channels if present) and speed to the universe. */
+    _applyPosition(pan, tilt, speed = 0) {
+        const update = {};
+        if ('pan'       in this._slotOffset) update[this._slotOffset['pan']]       = clamp(pan,   0, 255);
+        if ('tilt'      in this._slotOffset) update[this._slotOffset['tilt']]      = clamp(tilt,  0, 255);
+        if ('pan_fine'  in this._slotOffset) update[this._slotOffset['pan_fine']]  = 0;
+        if ('tilt_fine' in this._slotOffset) update[this._slotOffset['tilt_fine']] = 0;
+        if ('speed'     in this._slotOffset) update[this._slotOffset['speed']]     = clamp(speed, 0, 255);
+        this._universe.setChannels(update);
+        this._state.pan  = clamp(pan,  0, 255);
+        this._state.tilt = clamp(tilt, 0, 255);
+        this._state.on   = true;
     }
 }
 

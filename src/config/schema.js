@@ -70,9 +70,10 @@ const SCHEMA = {
         scene_map: { required: false, type: 'string' },
         timeout_s: { required: false, type: 'int', default: 10 },
         // DMX-specific keys (backend = dmx)
-        fixture:  { required: false, type: 'string' },
-        address:  { required: false, type: 'int', default: 1 },
-        channels: { required: false, type: 'string' },
+        fixture:   { required: false, type: 'string' },
+        address:   { required: false, type: 'int', default: 1 },
+        channels:  { required: false, type: 'string' },
+        positions: { required: false, type: 'string' },  // JSON map of named positions for mover fixtures
     },
     'light-zone': {
         // Light group sections follow pattern [light-zone:group_name]

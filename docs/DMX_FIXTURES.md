@@ -145,10 +145,49 @@ activation.
 
 **Capabilities:** `pan`, `tilt`, `dimmer`
 
-Suitable for: minimal moving heads with pan, tilt, and a single intensity
-channel. Color control is not available. Pan/tilt commands (`setPan`,
-`setTilt`) are reserved for Phase 6 — they return `DMX_CMD_UNSUPPORTED` in the
-current release.
+Suitable for: minimal moving heads with pan, tilt, and a single intensity channel.
+
+---
+
+### `mover-8ch` — 8 channels
+
+| Offset | Slot | Description |
+|---|---|---|
+| 1 | pan | Pan coarse position 0–255 |
+| 2 | tilt | Tilt coarse position 0–255 |
+| 3 | speed | Movement speed (0 = max speed on most fixtures) |
+| 4 | dimmer | Intensity 0–255 |
+| 5 | strobe | Strobe speed (0 = off) |
+| 6 | red | Red intensity 0–255 |
+| 7 | green | Green intensity 0–255 |
+| 8 | blue | Blue intensity 0–255 |
+
+**Capabilities:** `pan`, `tilt`, `dimmer`, `color`, `strobe`
+
+Suitable for: 8-channel wash moving heads with RGB colour mixing.
+
+---
+
+### `mover-12ch` — 12 channels
+
+| Offset | Slot | Description |
+|---|---|---|
+| 1  | pan       | Pan coarse position 0–255 |
+| 2  | pan_fine  | Pan fine (16-bit LSB) |
+| 3  | tilt      | Tilt coarse position 0–255 |
+| 4  | tilt_fine | Tilt fine (16-bit LSB) |
+| 5  | speed     | Movement speed (0 = max speed on most fixtures) |
+| 6  | dimmer    | Intensity 0–255 |
+| 7  | strobe    | Strobe speed (0 = off) |
+| 8  | red       | Red intensity 0–255 |
+| 9  | green     | Green intensity 0–255 |
+| 10 | blue      | Blue intensity 0–255 |
+| 11 | gobo      | Gobo wheel position 0–255 |
+| 12 | mode      | Fixture mode select |
+
+**Capabilities:** `pan`, `tilt`, `dimmer`, `color`, `strobe`, `gobo`, `mode`
+
+Suitable for: 12-channel spot moving heads with 16-bit pan/tilt precision, gobo wheel, and mode selection. PxB sets `pan_fine` and `tilt_fine` to `0` on every `moveTo`/`home` command (8-bit precision used). For full 16-bit control, use a custom fixture with a `positions` JSON entry that includes `pan_fine`/`tilt_fine` values.
 
 ---
 

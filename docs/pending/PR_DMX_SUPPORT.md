@@ -451,15 +451,29 @@ When hardware tests pass, commit:
 - Reuse the existing light command surface for color/dimmer; only motion is additive.
 
 ### Tasks
-- [ ] Profile + positions schema.
-- [ ] Adapter routing for `moveTo` / `home`.
-- [ ] Document in `docs/MQTT_API.md` §9c.
-- [ ] Unit tests with mock universe and a fake position table.
-- [ ] Optional: hardware validation against a borrowed entry-level mover.
+- [x] Profile + positions schema (`mover-8ch`, `mover-12ch`; `pan_fine`/`tilt_fine` in `VALID_SLOTS`; `positions` key in `src/config/schema.js`).
+- [x] Adapter routing for `moveTo` / `home` (`_resolvePosition`, `_applyPosition`, `_parsePositions`; `pan`/`tilt` state; `moved` event).
+- [x] Document in `docs/MQTT_API.md` §9c (mover commands, state shape, events, warning codes).
+- [x] Document `positions` key in `docs/CONFIG_INI.md`.
+- [x] Document `mover-8ch` and `mover-12ch` in `docs/DMX_FIXTURES.md`.
+- [x] Unit tests with mock universe and a fake position table (11 new tests; total 469 passing).
+- [ ] Hardware validation against an entry-level moving head fixture — see checklist below.
 
 ### Exit criteria
 - Operators define named positions in INI; PxO can call `moveTo` by name.
 - Mixed light/mover use in the same room works.
+
+### Hardware validation checklist (Phase 6)
+
+- [ ] Patch a moving head to a known DMX start address. Set `fixture = mover-8ch` (or `mover-12ch`) and `address` accordingly in INI.
+- [ ] Start PxB; confirm adapter shows `ready` in `{light.topic}/state`. State should include `pan: null, tilt: null`.
+- [ ] Publish `{ "command": "home" }`. Confirm the fixture moves to its home position. State should update with `pan: 128, tilt: 128`.
+- [ ] Publish `{ "command": "moveTo", "pan": 60, "tilt": 100 }`. Confirm the head tracks to the expected physical position.
+- [ ] Add a `positions` JSON string in INI. Publish `{ "command": "moveTo", "position": "stage-left" }`. Confirm the head tracks to the named position.
+- [ ] Publish `{ "command": "moveTo", "position": "nowhere" }`. Confirm `DMX_POSITION_UNKNOWN` warning on the warnings topic. Fixture does not move.
+- [ ] For `mover-12ch`: verify `pan_fine` and `tilt_fine` channels are 0 after a `moveTo`.
+- [ ] Confirm color/dimmer commands (`setColor`, `setBrightness`) still work alongside motion commands.
+- [ ] Mark this checklist complete and record fixture model and firmware version here once validated.
 
 ### Recommended AI model
 - **Claude Sonnet — Medium**

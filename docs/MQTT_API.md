@@ -316,6 +316,75 @@ Effect adapters control short-duration effect devices (foggers, strobes, hazers)
 
 Every effect adapter enforces a `max_run_ms` ceiling (INI key, default 4000). Any burst/pulse with `duration_ms > max_run_ms` is rejected with an `EFFECT_DURATION_CAPPED` warning — the device never fires. On adapter `dispose()` (including process shutdown), all channels are zeroed and the timer is cancelled.
 
+## 9c. Mover Commands (`{light.topic}/commands`)
+
+Moving-head fixtures (profiles `mover-8ch`, `mover-12ch`, `mover-basic`) expose pan/tilt motion commands in addition to all standard light commands.
+
+### moveTo
+
+Move the fixture to an absolute position.
+
+```json
+{ "command": "moveTo", "position": "stage-left" }
+```
+
+Or using raw values (0–255):
+
+```json
+{ "command": "moveTo", "pan": 100, "tilt": 80, "speed": 0 }
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `position` | string | Either `position` or `pan`/`tilt` | Named position defined in the `positions` INI key |
+| `pan` | integer 0–255 | See above | Raw coarse pan value |
+| `tilt` | integer 0–255 | See above | Raw coarse tilt value |
+| `speed` | integer 0–255 | No (default 0) | Movement speed (0 = max speed on most fixtures) |
+
+If `position` is given and `pan`/`tilt` are also present they are ignored; the named position wins.
+
+### home
+
+Return the fixture to the home position (default: pan 128, tilt 128; overridable via the `positions` config key).
+
+```json
+{ "command": "home" }
+```
+
+### State shape for mover fixtures
+
+When the fixture profile includes the `pan` capability, the state payload includes two additional fields:
+
+```json
+{
+  "timestamp": "2024-01-01T00:00:00.000Z",
+  "on": true,
+  "brightness": 100,
+  "color": null,
+  "scene": null,
+  "fixture": "mover-8ch",
+  "address": 1,
+  "pan": 128,
+  "tilt": 128
+}
+```
+
+`pan` and `tilt` are `null` until the first `moveTo` or `home` command is processed.
+
+### Events
+
+| Event | When | Extra fields |
+|---|---|---|
+| `moved` | Position command applied | `pan`, `tilt` |
+
+### Warning codes
+
+| Code | Meaning |
+|---|---|
+| `DMX_POSITION_UNKNOWN` | Named position not found in the fixture's `positions` map |
+| `DMX_CMD_INVALID` | `moveTo` received with neither `position` name nor `pan`/`tilt` values |
+| `DMX_CMD_UNSUPPORTED` | Motion command sent to a fixture without `pan` capability |
+
 ## 10. Per-Node Warnings (`{node.base_topic}/warnings`)
 
 Not retained. Same shape as bridge warnings.

@@ -358,3 +358,114 @@ describe('DmxAdapter — dispose()', () => {
         );
     });
 });
+
+// ── Mover commands (moveTo / home) ────────────────────────────────────────
+
+describe('Mover commands', () => {
+    function makeMoverAdapter(overrides = {}) {
+        return makeAdapter({
+            ...overrides,
+            config: { fixture: 'mover-8ch', address: 1, ...overrides.config },
+        });
+    }
+
+    it('constructs mover-8ch without throwing', () => {
+        expect(() => makeMoverAdapter()).not.toThrow();
+    });
+
+    it('constructs mover-12ch without throwing', () => {
+        expect(() => makeMoverAdapter({ config: { fixture: 'mover-12ch', address: 1 } })).not.toThrow();
+    });
+
+    it('moveTo by raw pan/tilt sets channels', async () => {
+        const { adapter, mqtt, universe } = makeMoverAdapter();
+        await adapter.init();
+        await sendCmd(mqtt, { command: 'moveTo', pan: 100, tilt: 200 });
+        // pan is ch1, tilt is ch2 for mover-8ch
+        expect(universe.setChannels).toHaveBeenCalledWith(expect.objectContaining({ 1: 100, 2: 200 }));
+    });
+
+    it('moveTo by named position sets channels', async () => {
+        const positions = JSON.stringify({ stage: { pan: 60, tilt: 80 } });
+        const { adapter, mqtt, universe } = makeMoverAdapter({ config: { fixture: 'mover-8ch', address: 1, positions } });
+        await adapter.init();
+        await sendCmd(mqtt, { command: 'moveTo', position: 'stage' });
+        expect(universe.setChannels).toHaveBeenCalledWith(expect.objectContaining({ 1: 60, 2: 80 }));
+    });
+
+    it('moveTo with unknown position publishes DMX_POSITION_UNKNOWN warning', async () => {
+        const { adapter, mqtt } = makeMoverAdapter();
+        await adapter.init();
+        await sendCmd(mqtt, { command: 'moveTo', position: 'nowhere' });
+        const warningCalls = mqtt.publish.mock.calls.filter(
+            ([t]) => t.endsWith('/warnings')
+        );
+        expect(warningCalls.length).toBeGreaterThan(0);
+        const body = JSON.parse(warningCalls[0][1]);
+        expect(body.code).toBe('DMX_POSITION_UNKNOWN');
+    });
+
+    it('moveTo without position name or raw values publishes DMX_CMD_INVALID', async () => {
+        const { adapter, mqtt } = makeMoverAdapter();
+        await adapter.init();
+        await sendCmd(mqtt, { command: 'moveTo' });
+        const warningCalls = mqtt.publish.mock.calls.filter(
+            ([t]) => t.endsWith('/warnings')
+        );
+        expect(warningCalls.length).toBeGreaterThan(0);
+        const body = JSON.parse(warningCalls[0][1]);
+        expect(body.code).toBe('DMX_CMD_INVALID');
+    });
+
+    it('home uses default home position pan=128, tilt=128', async () => {
+        const { adapter, mqtt, universe } = makeMoverAdapter();
+        await adapter.init();
+        await sendCmd(mqtt, { command: 'home' });
+        expect(universe.setChannels).toHaveBeenCalledWith(expect.objectContaining({ 1: 128, 2: 128 }));
+    });
+
+    it('home uses custom home position from positions config', async () => {
+        const positions = JSON.stringify({ home: { pan: 10, tilt: 20 } });
+        const { adapter, mqtt, universe } = makeMoverAdapter({ config: { fixture: 'mover-8ch', address: 1, positions } });
+        await adapter.init();
+        await sendCmd(mqtt, { command: 'home' });
+        expect(universe.setChannels).toHaveBeenCalledWith(expect.objectContaining({ 1: 10, 2: 20 }));
+    });
+
+    it('moveTo on non-mover fixture publishes DMX_CMD_UNSUPPORTED', async () => {
+        const { adapter, mqtt } = makeAdapter({ config: { fixture: 'rgb', address: 1 } });
+        await adapter.init();
+        await sendCmd(mqtt, { command: 'moveTo', pan: 100, tilt: 100 });
+        const warningCalls = mqtt.publish.mock.calls.filter(
+            ([t]) => t.endsWith('/warnings')
+        );
+        expect(warningCalls.length).toBeGreaterThan(0);
+        const body = JSON.parse(warningCalls[0][1]);
+        expect(body.code).toBe('DMX_CMD_UNSUPPORTED');
+    });
+
+    it('getState includes pan/tilt for mover fixture', async () => {
+        const { adapter, mqtt } = makeMoverAdapter();
+        await adapter.init();
+        await sendCmd(mqtt, { command: 'moveTo', pan: 50, tilt: 75 });
+        mqtt.publish.mockClear();
+        await sendCmd(mqtt, { command: 'getState' });
+        const stateCalls = mqtt.publish.mock.calls.filter(([t]) => t.endsWith('/state'));
+        expect(stateCalls.length).toBeGreaterThan(0);
+        const state = JSON.parse(stateCalls[stateCalls.length - 1][1]);
+        expect(state.pan).toBe(50);
+        expect(state.tilt).toBe(75);
+    });
+
+    it('mover-12ch zeros pan_fine and tilt_fine channels on moveTo', async () => {
+        const { adapter, mqtt, universe } = makeMoverAdapter({ config: { fixture: 'mover-12ch', address: 1 } });
+        await adapter.init();
+        await sendCmd(mqtt, { command: 'moveTo', pan: 90, tilt: 110 });
+        // channels: pan=1, pan_fine=2, tilt=3, tilt_fine=4
+        const call = universe.setChannels.mock.calls[universe.setChannels.mock.calls.length - 1][0];
+        expect(call[1]).toBe(90);  // pan
+        expect(call[2]).toBe(0);   // pan_fine
+        expect(call[3]).toBe(110); // tilt
+        expect(call[4]).toBe(0);   // tilt_fine
+    });
+});

@@ -235,6 +235,18 @@ Light device sections are used for direct network/cloud light backends (`hue`, `
 | `timeout_s` | int | no | `10` | Request timeout |
 | `fixture` | string | dmx only | — | Fixture profile: `dimmer` or `rgb` (Phase 2); more in Phase 3 |
 | `address` | int | dmx only | `1` | DMX start address for this fixture (1–512) |
+| `positions` | string(JSON) | dmx mover only | `{"home":{"pan":128,"tilt":128}}` | Named pan/tilt positions for `moveTo` command |
+
+`positions` is a JSON object mapping position names to `{ pan, tilt, speed? }` objects. The `home` position is always available (default `pan: 128, tilt: 128`) and can be overridden. Example:
+
+```ini
+[light:stage-mover]
+backend = dmx
+topic = paradox/houdini/lights/mover
+fixture = mover-8ch
+address = 1
+positions = {"home":{"pan":128,"tilt":128},"stage-left":{"pan":60,"tilt":100},"stage-right":{"pan":190,"tilt":100},"center":{"pan":128,"tilt":90}}
+```
 
 `scene_map` lets operators tune scene color matching between vendors without code changes. Example:
 
