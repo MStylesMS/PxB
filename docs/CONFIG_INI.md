@@ -14,6 +14,10 @@ PxB is configured by a single INI file. Pass the path via `--config` or default 
 | `[zigbee]` | Zigbee radio endpoint | 0–1 |
 | `[dmx]` | DMX512 universe output | 0–1 |
 | `[node:<label>]` | One configured device | 0–N |
+| `[light:<label>]` | One light fixture / Hue bridge / WiZ / LIFX device | 0–N |
+| `[light-zone:<label>]` | Fan-out group across multiple lights | 0–N |
+| `[switch:<label>]` | One Shelly relay | 0–N |
+| `[effect:<label>]` | One DMX effect device (fogger / strobe / hazer) | 0–N |
 
 ## `[mqtt]`
 
@@ -83,15 +87,15 @@ Configures one DMX512 output universe. One section per process.
 | Key | Type | Required | Default | Description |
 |-----|------|:--------:|---------|-------------|
 | `enabled` | bool | no | `true` | Disable without removing section |
-| `interface` | string | yes | — | `opendmx` (direct FTDI; Phase 1). `enttec-pro` accepted only from Phase 4 onward |
+| `interface` | string | yes | — | `opendmx` (direct FTDI) or `enttec-pro` (Enttec USB Pro / DMXKing ultraDMX2) |
 | `port` | path | yes | — | Serial device path. Prefer stable `/dev/serial/by-id/usb-FTDI_FT232R...` form |
 | `refresh_hz` | int | no | `30` | Frame repeat rate (1–44 Hz). Actual Hz may be lower due to baud-switch overhead |
 | `universe_size` | int | no | `512` | Slot count sent per frame (24–512) |
 | `ftdi_latency_ms` | int | no | `4` | FTDI latency timer in ms (opendmx only). Set to 4 or lower; the udev rule in `config/udev/99-ftdi-dmx.rules` applies this on plug-in |
 
-**Important:** `interface = opendmx` uses the baud-rate-switch BREAK method (open at 76800 baud, send `0x00`, reopen at 250000 baud). The `port.set({brk})` method is unreliable on ftdi_sio + Pi5 and must **not** be used. This is encoded in `src/dmx/interfaces/opendmx.js`.
+**opendmx:** uses the baud-rate-switch BREAK method (open at 76800 baud, send `0x00`, reopen at 250000 baud). The `port.set({brk})` method is unreliable on ftdi_sio + Pi5 and must **not** be used.
 
-**Phase gate:** `interface = enttec-pro` is accepted in the schema but causes a startup error until Phase 4 ships the Enttec Pro backend. This prevents silent misconfiguration.
+**enttec-pro / DMXKing ultraDMX2 Pro:** uses the Enttec Open Protocol label-6 envelope at 57600 baud 8N1. Hardware validation checklist: `docs/pending/PR_DMX_SUPPORT.md §8`.
 
 Example:
 
@@ -101,6 +105,49 @@ enabled     = true
 interface   = opendmx
 port        = /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_B002JE1K-if00-port0
 refresh_hz  = 30
+```
+
+## `[effect:<label>]`
+
+Declares one DMX effect output device (fogger, strobe, or hazer). Requires a `[dmx]` section. Uses `DmxEffectAdapter` with a timer-safe command surface separate from the light adapters.
+
+`<label>` must match `[a-z0-9][a-z0-9-]*`.
+
+| Key | Type | Required | Default | Description |
+|-----|------|:--------:|---------|-------------|
+| `backend` | string | yes | — | Must be `dmx` |
+| `topic` | string | yes | — | MQTT topic root for this device |
+| `fixture` | string | yes | — | `fogger-1ch`, `fogger-2ch`, `strobe-2ch`, or `hazer-2ch` |
+| `address` | int | no | `1` | DMX start address, 1-based (1–512) |
+| `max_run_ms` | int | no | `4000` | Safety ceiling: any burst/pulse with `duration_ms` above this value is rejected with a warning |
+| `intensity` | int | no | `100` | Default output intensity for burst commands that omit the `intensity` param (0–100) |
+| `strobe_rate` | int | no | `128` | Strobe channel value for `strobe-2ch` (0–255; 0 = off, 255 = fastest) |
+| `fan_speed` | int | no | `0` | Speed channel value for `fogger-2ch` and `hazer-2ch` (0–255) |
+
+Example:
+
+```ini
+[dmx]
+enabled    = true
+interface  = enttec-pro
+port       = /dev/serial/by-id/usb-ENTTEC_DMX_USB_PRO_EN123456-if00-port0
+
+[effect:fogger]
+backend    = dmx
+topic      = paradox/houdini/effects/fogger
+fixture    = fogger-2ch
+address    = 1
+max_run_ms = 3000
+intensity  = 90
+fan_speed  = 120
+
+[effect:strobe]
+backend     = dmx
+topic       = paradox/houdini/effects/strobe
+fixture     = strobe-2ch
+address     = 3
+max_run_ms  = 2000
+strobe_rate = 180
 ```
 
 ## `[node:<label>]`

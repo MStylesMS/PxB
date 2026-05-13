@@ -24,6 +24,7 @@ const WizAdapter = require('./lights/wiz');
 const LifxAdapter = require('./lights/lifx');
 const DmxAdapter = require('./lights/dmx');
 const ShellyAdapter = require('./switches/shelly');
+const DmxEffectAdapter = require('./effects/dmx');
 const LightZoneAdapter = require('./lights/zone');
 const UnavailableOutputAdapter = require('./adapters/unavailable-output');
 const { DmxUniverse } = require('./dmx/universe');
@@ -367,8 +368,9 @@ async function main() {
 
     // --- Domain adapters (lights, switches) ---
     const domainAdapters = {
-        lights: new Map(),      // label -> adapter instance
-        switches: new Map(),    // label -> adapter instance
+        lights:  new Map(),      // label -> adapter instance
+        switches: new Map(),     // label -> adapter instance
+        effects:  new Map(),     // label -> adapter instance
     };
 
     const publishAdapterInitWarning = (topic, label, message) => {
@@ -573,6 +575,60 @@ async function main() {
         }
     }
 
+    // Initialize effect adapters (foggers, strobes, hazers).
+    for (const [label, effectConfig] of Object.entries(config.effects || {})) {
+        try {
+            if (!dmxUniverse) {
+                throw new Error(
+                    `backend=dmx requires a configured and enabled [dmx] section. ` +
+                    `Add [dmx] to the INI or set enabled = true.`
+                );
+            }
+
+            const adapter = new DmxEffectAdapter({
+                config: effectConfig,
+                mqttClient: mqtt,
+                logger,
+                universe: dmxUniverse,
+            });
+
+            adapter._subsystemId = `effect-${label}`;
+            await adapter.init();
+            domainAdapters.effects.set(label, adapter);
+            logger.info(`Effect adapter '${label}' initialized (${effectConfig.fixture})`);
+
+            const _capturedEffectAdapter = adapter;
+            const _capturedEffectConfig  = effectConfig;
+            registry.register({
+                id: `effect-${label}`,
+                kind: 'output-adapter',
+                criticality: 'optional',
+                onCrash: async (err) => {
+                    try { await _capturedEffectAdapter.dispose(); } catch { /* ignore */ }
+                    await attachUnavailableOutput({
+                        label,
+                        backend: _capturedEffectConfig.backend,
+                        domain: 'effect',
+                        config: _capturedEffectConfig,
+                        reason: err instanceof Error ? err.message : String(err),
+                        targetMap: domainAdapters.effects,
+                    });
+                },
+            });
+        } catch (err) {
+            logger.warn(`Effect adapter '${label}' failed to initialize: ${err.message}`);
+            publishAdapterInitWarning(effectConfig.topic, label, err.message);
+            await attachUnavailableOutput({
+                label,
+                backend: effectConfig.backend,
+                domain: 'effect',
+                config: effectConfig,
+                reason: err.message,
+                targetMap: domainAdapters.effects,
+            });
+        }
+    }
+
     // --- Graceful shutdown ---
     async function shutdown(signal) {
         logger.info(`Received ${signal} — shutting down`);
@@ -583,6 +639,9 @@ async function main() {
                 try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
             }
             for (const [, adapter] of domainAdapters.switches) {
+                try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
+            }
+            for (const [, adapter] of domainAdapters.effects) {
                 try { await adapter.dispose(); } catch (err) { logger.warn(`Adapter dispose error: ${err.message}`); }
             }
         } catch (err) {

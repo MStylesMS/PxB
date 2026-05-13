@@ -40,7 +40,10 @@ const { validateProfile, VALID_SLOTS } = require('./schema');
 
 const BUILT_INS = {};
 
-for (const name of ['dimmer', 'rgb', 'rgbw', 'rgba', 'rgbaw', 'rgbawuv', 'par-7ch', 'mover-basic']) {
+for (const name of [
+    'dimmer', 'rgb', 'rgbw', 'rgba', 'rgbaw', 'rgbawuv', 'par-7ch', 'mover-basic',
+    'fogger-1ch', 'fogger-2ch', 'strobe-2ch', 'hazer-2ch',
+]) {
     BUILT_INS[name] = require(`./${name}`);
 }
 

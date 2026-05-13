@@ -304,7 +304,9 @@ scene_map   = { ... }                    ; optional, reuses Hue/WiZ schema
 
 ## 8. Phase 4 — Enttec DMX USB Pro Class Backend (independent)
 
-**Status: Code complete — hardware validation pending.**
+**Status: Code complete — unit-tested — hardware validation pending.**
+
+> The code tasks below are done. The hardware checklist items below are **future work** and do not block the Phase 4 or Phase 5 code from landing.
 
 **Goal:** Production-grade DMX interface support without touching the adapter or fixture layers.
 
@@ -360,6 +362,8 @@ The code is written to spec but has **not been tested against a real device**. W
 
 ## 9. Phase 5 — Effects Domain: Foggers, Strobes, Hazers (independent)
 
+**Status: Code complete — hardware validation pending.**
+
 **Goal:** First-class commands for short-duration effect devices that don't fit the "light" mental model.
 
 ### Design
@@ -371,15 +375,50 @@ The code is written to spec but has **not been tested against a real device**. W
   - `{ "command": "stop" }`
   - `{ "command": "setIntensity", "intensity": 60 }`
 - Adapter manages its own timers and guarantees `stop` on dispose (no stuck foggers).
-- **Safety:** add a config-level `max_run_ms` cap per effect; the adapter refuses any command that would exceed it and publishes a warning. Default to a conservative value (e.g., 4000 ms for foggers).
+- **Safety:** config-level `max_run_ms` cap per effect; the adapter refuses any command that would exceed it and publishes a warning. Default: 4000 ms.
 
 ### Tasks
-- [ ] Add `[effect:*]` section schema + validation.
-- [ ] Implement `DmxEffectAdapter` with timer discipline.
-- [ ] Document the new command set in `docs/MQTT_API.md` (new §9b).
-- [ ] Update `docs/SPEC.md` §3 with the `effect` device class.
-- [ ] Add `docs/QUICK_START_DMX_EFFECTS.md`.
-- [ ] Unit tests: timer-based behavior with jest fake timers, max_run_ms enforcement, dispose stops output.
+- [x] Add `[effect:*]` section schema + validation (`src/config/schema.js`, `src/config/ini-loader.js`).
+- [x] Implement `DmxEffectAdapter` with timer discipline (`src/effects/dmx.js`).
+- [x] Wire effect adapters in `src/index.js` (init loop, graceful shutdown).
+- [x] Add effect fixture profiles: `fogger-1ch`, `fogger-2ch`, `strobe-2ch`, `hazer-2ch` in `src/dmx/profiles/`.
+- [x] Add `'effect'` capability to profile schema validator.
+- [x] Document the new command set in `docs/MQTT_API.md` (§9b).
+- [x] Update `docs/SPEC.md` §3 with the `effect` device class.
+- [x] Add `docs/QUICK_START_DMX_EFFECTS.md`.
+- [x] Update `docs/DMX_FIXTURES.md` with the 4 new effect profiles.
+- [x] Update `docs/CONFIG_INI.md` with `[effect:<label>]` section reference.
+- [x] Unit tests: timer-based behavior with jest fake timers, max_run_ms enforcement, dispose stops output (`test/unit/effects/dmx-effect-adapter.test.js`).
+
+### ⚠ Hardware Validation Checklist (requires physical effect device)
+
+The code is written to spec but has **not been tested against a real device**. When you have a fogger, strobe, or hazer patched to a DMX universe, work through this list:
+
+**Fogger (`fogger-1ch` or `fogger-2ch`):**
+- [ ] Patch fogger to known DMX address. Update INI `[effect:fogger]` accordingly.
+- [ ] Start PxB; confirm adapter shows `ready` in `{effect.topic}/state`.
+- [ ] Publish `{ "command": "burst", "duration_ms": 2000 }`. Confirm fog fires and stops after 2 s.
+- [ ] Confirm `burst-ended` event appears on `{effect.topic}/events`.
+- [ ] Publish `{ "command": "burst", "duration_ms": 99999 }`. Confirm `EFFECT_DURATION_CAPPED` warning; no fog.
+- [ ] Publish `{ "command": "stop" }` mid-burst. Confirm fog stops immediately.
+- [ ] For `fogger-2ch`: vary `fan_speed` in INI; confirm CH2 changes air projection.
+
+**Strobe (`strobe-2ch`):**
+- [ ] Publish `{ "command": "burst", "duration_ms": 1000 }`. Confirm strobe fires for 1 s at configured `strobe_rate`.
+- [ ] Vary `strobe_rate` in INI; confirm CH1 speed difference on device.
+- [ ] Confirm `stopped` event appears when `stop` is sent mid-burst.
+
+**Hazer (`hazer-2ch`):**
+- [ ] Publish `{ "command": "setIntensity", "intensity": 30 }`. Confirm continuous haze output.
+- [ ] Publish `{ "command": "stop" }`. Confirm haze stops.
+- [ ] Confirm CH2 fan dispersion tracks `fan_speed` config.
+
+**Safety:**
+- [ ] Kill PxB mid-burst (`kill -9 <pid>`). Confirm all channels zero after reconnect.
+- [ ] Confirm light fixtures on the same universe are unaffected by effect commands.
+
+When hardware tests pass, commit:  
+`Test: Phase 5 hardware validation — <fixture type> at address <N> on <date>`
 
 ### Exit criteria
 - PxO can fire a fogger blast via `{ command: "burst", duration_ms: 1200 }` and trust PxB to cut output on time.

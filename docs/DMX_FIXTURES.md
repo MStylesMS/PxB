@@ -1,6 +1,6 @@
 # DMX Fixture Profiles (PxB)
 
-PxB ships eight built-in fixture profiles and supports one-off `custom` fixtures
+PxB ships twelve built-in fixture profiles and supports one-off `custom` fixtures
 defined directly in the INI. Every profile is a small validated JS object in
 `src/dmx/profiles/` and is loaded at startup by `src/dmx/profiles/index.js`.
 
@@ -149,6 +149,82 @@ Suitable for: minimal moving heads with pan, tilt, and a single intensity
 channel. Color control is not available. Pan/tilt commands (`setPan`,
 `setTilt`) are reserved for Phase 6 — they return `DMX_CMD_UNSUPPORTED` in the
 current release.
+
+---
+
+## Effect Profiles (Phase 5)
+
+Effect profiles carry the `effect` capability and are intended for use with
+`[effect:<label>]` INI sections and `DmxEffectAdapter`. They respond to the
+`burst`, `pulse`, `stop`, and `setIntensity` commands rather than the light
+command surface.
+
+> **Custom fixtures are not supported for effect devices.** Stick to one of
+> the four built-in profiles; if your device has an unusual channel layout,
+> request a new built-in profile.
+
+---
+
+### `fogger-1ch` — 1 channel
+
+| Offset | Slot | Description |
+|---|---|---|
+| 1 | dimmer | Output intensity — 0 = off, 255 = maximum fog |
+
+**Capabilities:** `dimmer`, `effect`
+
+Suitable for: single-channel fog machines, basic atmospheric foggers.
+
+---
+
+### `fogger-2ch` — 2 channels
+
+| Offset | Slot | Description |
+|---|---|---|
+| 1 | dimmer | Output intensity — 0 = off, 255 = maximum fog |
+| 2 | speed  | Fan speed — 0 = off, 255 = maximum air projection |
+
+**Capabilities:** `dimmer`, `effect`
+
+Configure fan speed with `fan_speed` in the INI section (default `0`).
+Set to 0 for a drifting cloud; raise to 100–200 for a directed jet.
+
+Suitable for: 2-channel fog machines where the second channel controls fan
+thrust.
+
+---
+
+### `strobe-2ch` — 2 channels
+
+| Offset | Slot | Description |
+|---|---|---|
+| 1 | strobe | Strobe rate — 0 = off, 1 = slowest, 255 = fastest |
+| 2 | dimmer | Intensity / brightness — 0 = off, 255 = full brightness |
+
+**Capabilities:** `strobe`, `dimmer`, `effect`
+
+Configure the strobe rate with `strobe_rate` in the INI section (default `128`
+= medium speed). On `burst`/`pulse`, the strobe channel is set to
+`strobe_rate` and the dimmer channel is set proportional to `intensity`.
+
+Suitable for: 2-channel LED or halogen strobe lights.
+
+---
+
+### `hazer-2ch` — 2 channels
+
+| Offset | Slot | Description |
+|---|---|---|
+| 1 | dimmer | Haze output — 0 = off, 255 = maximum haze |
+| 2 | speed  | Fan dispersion speed — 0 = off, 255 = maximum |
+
+**Capabilities:** `dimmer`, `effect`
+
+For a subtle ambient haze, try `intensity = 25` and `fan_speed = 60` in the
+INI. The hazer runs continuously until `stop` is sent; use `setIntensity`
+rather than `burst` for continuous atmospheric fill.
+
+Suitable for: 2-channel atmospheric hazers (fine mist, not dense fog).
 
 ---
 

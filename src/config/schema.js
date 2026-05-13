@@ -96,6 +96,17 @@ const SCHEMA = {
         universe_size:   { required: false, type: 'int',    default: 512 },
         ftdi_latency_ms: { required: false, type: 'int',    default: 4 },
     },
+    effect: {
+        // Effect device sections follow pattern [effect:device_name]
+        backend:     { required: true,  type: 'string' },
+        topic:       { required: true,  type: 'string' },
+        fixture:     { required: true,  type: 'string' },
+        address:     { required: false, type: 'int',    default: 1 },
+        max_run_ms:  { required: false, type: 'int',    default: 4000 },
+        intensity:   { required: false, type: 'int',    default: 100 },
+        strobe_rate: { required: false, type: 'int',    default: 128 },
+        fan_speed:   { required: false, type: 'int',    default: 0 },
+    },
 };
 
 const VALID_NODE_LABEL = /^[a-z0-9][a-z0-9-]*$/;
@@ -108,6 +119,9 @@ const VALID_ZONE_TYPES = new Set(['lights', 'switches']);
 const VALID_DMX_INTERFACES = new Set(['opendmx', 'enttec-pro']);
 const IMPLEMENTED_DMX_INTERFACES = new Set(['opendmx', 'enttec-pro']);
 
+const VALID_EFFECT_BACKENDS = new Set(['dmx']);
+const VALID_EFFECT_FIXTURES  = new Set(['fogger-1ch', 'fogger-2ch', 'strobe-2ch', 'hazer-2ch']);
+
 module.exports = {
     SCHEMA,
     VALID_NODE_LABEL,
@@ -119,4 +133,6 @@ module.exports = {
     VALID_ZONE_TYPES,
     VALID_DMX_INTERFACES,
     IMPLEMENTED_DMX_INTERFACES,
+    VALID_EFFECT_BACKENDS,
+    VALID_EFFECT_FIXTURES,
 };

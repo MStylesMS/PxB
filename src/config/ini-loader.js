@@ -12,6 +12,8 @@ const {
     VALID_HUE_TARGET_TYPES,
     VALID_SWITCH_BACKENDS,
     VALID_DMX_INTERFACES,
+    VALID_EFFECT_BACKENDS,
+    VALID_EFFECT_FIXTURES,
 } = require('./schema');
 
 /**
@@ -81,6 +83,7 @@ function loadConfig(configPath) {
         lights: {},
         light_zones: {},
         switches: {},
+        effects: {},
         dmx: null,
     };
 
@@ -381,6 +384,57 @@ function loadConfig(configPath) {
 
         sw.label = label;
         config.switches[label] = sw;
+    }
+
+    // --- [effect:<label>] sections ---
+    const seenEffectTopics = new Map();
+    for (const [sectionKey, sectionVal] of Object.entries(raw)) {
+        if (!sectionKey.startsWith('effect:')) continue;
+        const label = sectionKey.slice(7).trim();
+
+        if (!VALID_NODE_LABEL.test(label)) {
+            errors.push(`[${sectionKey}] invalid label format — must match [a-z0-9][a-z0-9-]*`);
+            continue;
+        }
+
+        let effect;
+        try {
+            effect = applySchema(SCHEMA.effect, sectionVal, sectionKey);
+        } catch (e) {
+            errors.push(e.message);
+            continue;
+        }
+
+        if (!VALID_EFFECT_BACKENDS.has(effect.backend)) {
+            errors.push(
+                `[${sectionKey}] unknown backend "${effect.backend}" — expected: ${[...VALID_EFFECT_BACKENDS].join(', ')}`
+            );
+        }
+
+        if (!VALID_EFFECT_FIXTURES.has(effect.fixture)) {
+            errors.push(
+                `[${sectionKey}] unknown fixture "${effect.fixture}" — expected: ${[...VALID_EFFECT_FIXTURES].join(', ')}. ` +
+                `Custom fixtures are not supported for effect devices.`
+            );
+        }
+
+        const addr = effect.address || 1;
+        if (addr < 1 || addr > 512) {
+            errors.push(`[${sectionKey}] address must be between 1 and 512, got: ${addr}`);
+        }
+
+        if (effect.max_run_ms < 1 || effect.max_run_ms > 30000) {
+            errors.push(`[${sectionKey}] max_run_ms must be between 1 and 30000, got: ${effect.max_run_ms}`);
+        }
+
+        if (seenEffectTopics.has(effect.topic)) {
+            errors.push(`[${sectionKey}] topic "${effect.topic}" already used by effect "${seenEffectTopics.get(effect.topic)}"`);
+        } else {
+            seenEffectTopics.set(effect.topic, label);
+        }
+
+        effect.label = label;
+        config.effects[label] = effect;
     }
 
     // At least one radio must be present when node sections are defined.

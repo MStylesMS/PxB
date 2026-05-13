@@ -30,6 +30,7 @@ const VALID_CAPABILITIES = new Set([
     'tilt',
     'gobo',
     'mode',
+    'effect',   // effect devices (fogger, strobe, hazer) — handled by DmxEffectAdapter
 ]);
 
 const VALID_SLOTS = new Set([

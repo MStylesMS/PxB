@@ -268,6 +268,54 @@ Warning code for unsupported commands: `DMX_CMD_UNSUPPORTED`.
 
 Built-in fixture profiles for Phase 2: `dimmer` (1 ch), `rgb` (3 ch). Additional profiles land in Phase 3.
 
+## 9b. Effect Commands (`{effect.topic}/commands`)
+
+Effect adapters control short-duration effect devices (foggers, strobes, hazers). Commands use the same `{ "command": "...", ...params }` envelope as all PxB adapters.
+
+| Command | Required params | Optional params | Description |
+|---|---|---|---|
+| `burst` | `duration_ms` (integer ≥ 1) | `intensity` (0–100, default = config `intensity`) | Fire output for `duration_ms` ms then auto-stop. Rejected if `duration_ms` > config `max_run_ms`. |
+| `pulse` | `duration_ms` (integer ≥ 1) | `intensity` (0–100) | Alias for `burst`. |
+| `stop` | — | — | Immediately zero all channels and cancel any running timer. |
+| `setIntensity` | `intensity` (0–100) | — | Set output level without a timer (stays on until `stop` or overwritten). |
+| `getStatus` | — | — | Re-publish current state to `{effect.topic}/state`. |
+
+### State (`{effect.topic}/state`) — retained
+
+```json
+{
+  "on":         false,
+  "intensity":  0,
+  "expires_at": null,
+  "fixture":    "fogger-1ch",
+  "address":    1,
+  "timestamp":  "2026-05-12T10:00:00.000Z"
+}
+```
+
+`expires_at` is an ISO-8601 timestamp when the current burst will auto-stop, or `null` if no timer is running.
+
+### Events (`{effect.topic}/events`)
+
+| Event | When | Extra fields |
+|---|---|---|
+| `burst-started` | Burst begins | `intensity`, `duration_ms`, `expires_at` |
+| `burst-ended`   | Auto-stop after timer expires | `intensity` |
+| `stopped`       | Manual `stop` command (was running) | — |
+| `intensity-updated` | `setIntensity` processed | `intensity` |
+
+### Warning codes
+
+| Code | Meaning |
+|---|---|
+| `EFFECT_CMD_INVALID` | Malformed payload or missing required parameter |
+| `EFFECT_CMD_UNKNOWN` | Unrecognised command name |
+| `EFFECT_DURATION_CAPPED` | `duration_ms` exceeds `max_run_ms`; command rejected |
+
+### Safety
+
+Every effect adapter enforces a `max_run_ms` ceiling (INI key, default 4000). Any burst/pulse with `duration_ms > max_run_ms` is rejected with an `EFFECT_DURATION_CAPPED` warning — the device never fires. On adapter `dispose()` (including process shutdown), all channels are zeroed and the timer is cancelled.
+
 ## 10. Per-Node Warnings (`{node.base_topic}/warnings`)
 
 Not retained. Same shape as bridge warnings.
