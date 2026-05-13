@@ -106,8 +106,7 @@ const VALID_HUE_TARGET_TYPES = new Set(['all', 'group', 'light']);
 const VALID_SWITCH_BACKENDS = new Set(['shelly']);
 const VALID_ZONE_TYPES = new Set(['lights', 'switches']);
 const VALID_DMX_INTERFACES = new Set(['opendmx', 'enttec-pro']);
-// Phase gate: enttec-pro is known but not implemented until Phase 4.
-const IMPLEMENTED_DMX_INTERFACES = new Set(['opendmx']);
+const IMPLEMENTED_DMX_INTERFACES = new Set(['opendmx', 'enttec-pro']);
 
 module.exports = {
     SCHEMA,

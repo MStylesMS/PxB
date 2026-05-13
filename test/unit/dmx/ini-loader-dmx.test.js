@@ -77,15 +77,15 @@ port = /dev/ttyUSB0
     });
 });
 
-describe('ini-loader — [dmx] enttec-pro rejected (Phase 4 gate)', () => {
-    it('produces a Phase-4 error for enttec-pro', () => {
-        const { error } = parse(`
+describe('ini-loader — [dmx] enttec-pro accepted (Phase 4 implemented)', () => {
+    it('parses enttec-pro interface without error', () => {
+        const { config, error } = parse(`
 [dmx]
 interface = enttec-pro
 port = /dev/ttyUSB0
 `);
-        expect(error).not.toBeNull();
-        expect(/Phase 4/i.test(error)).toBe(true);
+        expect(error).toBeNull();
+        expect(config.dmx.interface).toBe('enttec-pro');
     });
 });
 

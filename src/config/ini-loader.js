@@ -12,7 +12,6 @@ const {
     VALID_HUE_TARGET_TYPES,
     VALID_SWITCH_BACKENDS,
     VALID_DMX_INTERFACES,
-    IMPLEMENTED_DMX_INTERFACES,
 } = require('./schema');
 
 /**
@@ -155,11 +154,6 @@ function loadConfig(configPath) {
             if (!VALID_DMX_INTERFACES.has(dmx.interface)) {
                 errors.push(
                     `[dmx] unknown interface "${dmx.interface}" — expected: ${[...VALID_DMX_INTERFACES].join(', ')}`
-                );
-            } else if (!IMPLEMENTED_DMX_INTERFACES.has(dmx.interface)) {
-                errors.push(
-                    `[dmx] interface "${dmx.interface}" is not yet implemented (Phase 4). ` +
-                    `Set interface = opendmx to use the direct FTDI driver.`
                 );
             }
 

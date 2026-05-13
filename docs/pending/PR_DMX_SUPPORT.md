@@ -304,27 +304,57 @@ scene_map   = { ... }                    ; optional, reuses Hue/WiZ schema
 
 ## 8. Phase 4 — Enttec DMX USB Pro Class Backend (independent)
 
+**Status: Code complete — hardware validation pending.**
+
 **Goal:** Production-grade DMX interface support without touching the adapter or fixture layers.
 
 ### Design
 - Implement `src/dmx/interfaces/enttec-pro.js` against the Enttec DMX USB Pro Open Protocol (label-framed, including label `6` for DMX output).
-- Auto-detect on `interface = auto` by reading USB vendor/product (`0403:6001` defaults to `opendmx`; Enttec/DMXKing Pro-class IDs default to `enttec-pro`). Auto-detect is opt-in, off by default.
 - No change to `DmxUniverse`, `DmxAdapter`, or fixture profiles.
 
 ### Tasks
-- [ ] Implement `enttec-pro.js` frame builder + serial write.
-- [ ] Validate against an actual Enttec DMX USB Pro (or DMXKing ultraDMX2 Pro) — buy or borrow hardware.
-- [ ] Extend `[dmx] interface` schema to include `enttec-pro` and `auto`.
-- [ ] Unit tests for label framing.
-- [ ] Manual hardware test mirroring Phase 0, using the same Phase 0 fixture.
-- [ ] Update `docs/SPEC.md` §19 "Supported Devices" with the validated Enttec/DMXKing model.
+- [x] Implement `enttec-pro.js` frame builder + serial write (label-6 envelope, 57600 baud 8N1, persistent port).
+- [x] Unit tests for label framing, port lifecycle, and path-change reconnect.
+- [x] Update `src/config/schema.js`: add `enttec-pro` to `IMPLEMENTED_DMX_INTERFACES`.
+- [x] Remove Phase-4 guard from `src/config/ini-loader.js`.
+- [ ] **HARDWARE:** Validate against an actual Enttec DMX USB Pro or DMXKing ultraDMX2 Pro — see checklist below.
+- [ ] **HARDWARE:** Update `docs/SPEC.md` §19 "Supported Devices" with the validated model + firmware version.
 
 ### Exit criteria
 - Swapping `interface = opendmx` for `interface = enttec-pro` on the same fixture works with no other config change.
 
+### ⚠ Hardware Validation Checklist (requires physical Enttec Pro device)
+
+The code is written to spec but has **not been tested against a real device**. When you have an Enttec DMX USB Pro or DMXKing ultraDMX2 Pro, work through this list:
+
+- [ ] Plug device in. Confirm USB path:  
+      `ls /dev/serial/by-id/`
+- [ ] Confirm FTDI USB ID:  
+      `lsusb | grep -i ftdi`  
+      (expect `0403:6001` or `0403:FA63`)
+- [ ] Update `config/dmx-manual-test.ini`:  
+      `interface = enttec-pro` and correct `port = /dev/...` path.
+- [ ] Start PxB:  
+      `node src/index.js --config config/dmx-manual-test.ini`  
+      Confirm no startup errors.
+- [ ] Send `on` command. Confirm fixture lights up at expected level.
+- [ ] Run the same colour and brightness tests from the Phase 2 manual test.
+- [ ] Test at default `refresh_hz = 30` and at 44 Hz; confirm no flicker or dropped frames.
+- [ ] If the fixture does not respond:
+  - Confirm baud rate is 57600 (not 250000 — that is the OpenDmx line rate).
+  - Try `EnttecProInterface.interFrameDelayMs = 2` in the source (documented TODO in `enttec-pro.js`).
+  - Capture serial output with `stty -F /dev/ttyUSB0 raw; hexdump -C /dev/ttyUSB0` and compare against the Enttec USB Pro Communications Protocol v1.44 §5.
+- [ ] Run 30-minute continuous-frame stability test under load:  
+      `stress -c 4` (in a second terminal while PxB is running)  
+      Confirm no fixture flicker.
+- [ ] Mark `src/dmx/interfaces/enttec-pro.js` `TODO(hardware)` comment as validated.
+- [ ] Update `docs/SPEC.md` §19 "Supported Devices" with: validated model, firmware version seen in `lsusb`, date tested, Pi model tested on.
+- [ ] Commit with message:  
+      `Test: Phase 4 hardware validation — Enttec USB Pro on <device> (<date>)`
+
 ### Recommended AI model
-- **Claude Sonnet — High** for the framing implementation; protocol mistakes are silent until a real fixture misbehaves.
-- **Claude Sonnet — Medium** for the schema, tests, and docs.
+- **Claude Sonnet — High** for any framing fix if the fixture misbehaves (protocol mistakes are silent until a real fixture talks back).
+- **Claude Sonnet — Low** for the docs-only update after validation passes.
 
 ---
 
