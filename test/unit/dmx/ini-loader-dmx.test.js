@@ -164,3 +164,60 @@ port = /dev/ttyUSB0
         expect(error).not.toBeNull();
     });
 });
+
+// ── Multi-universe ([dmx:<label>]) ────────────────────────────────────────
+
+describe('ini-loader — [dmx:<label>] multi-universe', () => {
+    it('parses a single named universe', () => {
+        const { config, error } = parse(`
+[dmx:main]
+interface = opendmx
+port = /dev/ttyUSB0
+`);
+        expect(error).toBeNull();
+        expect(config.dmxBuses).toHaveProperty('main');
+        expect(config.dmxBuses['main'].label).toBe('main');
+        expect(config.dmxBuses['main'].interface).toBe('opendmx');
+        // legacy config.dmx pointer should be set to first named bus
+        expect(config.dmx).toBe(config.dmxBuses['main']);
+    });
+
+    it('parses multiple named universes', () => {
+        const { config, error } = parse(`
+[dmx:stage]
+interface = opendmx
+port = /dev/ttyUSB0
+
+[dmx:foyer]
+interface = enttec-pro
+port = /dev/ttyUSB1
+`);
+        expect(error).toBeNull();
+        expect(Object.keys(config.dmxBuses)).toEqual(expect.arrayContaining(['stage', 'foyer']));
+        expect(config.dmxBuses['foyer'].interface).toBe('enttec-pro');
+    });
+
+    it('[dmx:default] alongside [dmx] is a config error', () => {
+        const { error } = parse(`
+[dmx]
+interface = opendmx
+port = /dev/ttyUSB0
+
+[dmx:default]
+interface = opendmx
+port = /dev/ttyUSB1
+`);
+        expect(error).not.toBeNull();
+    });
+
+    it('[dmx] singleton is stored under dmxBuses.default', () => {
+        const { config, error } = parse(`
+[dmx]
+interface = opendmx
+port = /dev/ttyUSB0
+`);
+        expect(error).toBeNull();
+        expect(config.dmxBuses).toHaveProperty('default');
+        expect(config.dmxBuses['default'].label).toBe('default');
+    });
+});

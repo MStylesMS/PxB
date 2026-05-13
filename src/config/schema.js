@@ -74,6 +74,7 @@ const SCHEMA = {
         address:   { required: false, type: 'int', default: 1 },
         channels:  { required: false, type: 'string' },
         positions: { required: false, type: 'string' },  // JSON map of named positions for mover fixtures
+        universe:  { required: false, type: 'string', default: 'default' }, // which [dmx:<label>] universe to use
     },
     'light-zone': {
         // Light group sections follow pattern [light-zone:group_name]
@@ -96,6 +97,18 @@ const SCHEMA = {
         refresh_hz:      { required: false, type: 'int',    default: 30 },
         universe_size:   { required: false, type: 'int',    default: 512 },
         ftdi_latency_ms: { required: false, type: 'int',    default: 4 },
+        topic:           { required: false, type: 'string' }, // optional MQTT topic for universe-level commands
+    },
+    // dmxBus is the same shape — used for [dmx:<label>] multi-universe sections.
+    // Defined as a reference; actual parsing loops over raw keys in ini-loader.
+    dmxBus: {
+        enabled:         { required: false, type: 'bool',   default: true },
+        interface:       { required: true,  type: 'string' },
+        port:            { required: true,  type: 'path' },
+        refresh_hz:      { required: false, type: 'int',    default: 30 },
+        universe_size:   { required: false, type: 'int',    default: 512 },
+        ftdi_latency_ms: { required: false, type: 'int',    default: 4 },
+        topic:           { required: false, type: 'string' },
     },
     effect: {
         // Effect device sections follow pattern [effect:device_name]
@@ -107,6 +120,7 @@ const SCHEMA = {
         intensity:   { required: false, type: 'int',    default: 100 },
         strobe_rate: { required: false, type: 'int',    default: 128 },
         fan_speed:   { required: false, type: 'int',    default: 0 },
+        universe:    { required: false, type: 'string', default: 'default' },  // which [dmx:<label>] universe to use
     },
 };
 

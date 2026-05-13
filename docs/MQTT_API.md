@@ -249,24 +249,126 @@ PxB fans a command out to each member light adapter, and each adapter should app
 the supported parts of the request while publishing warnings when the request asks
 for a capability that backend cannot satisfy.
 
-### DMX backend caveats (`backend = dmx`, Phase 2)
+### DMX backend command surface (`backend = dmx`, Phase 7)
 
-The `dmx` backend supports a subset of the light command surface. Unsupported commands
+The `dmx` backend supports the full command surface below. Unsupported commands
 are **acknowledged with a structured warning** on `{topic}/warnings` and never silently dropped.
 
-| Command | Phase 2 support |
-|---|---|
-| `on`, `allOn`, `off`, `allOff` | ✅ all profiles |
-| `setBrightness` | ✅ all profiles |
-| `setColor` | ✅ `rgb` profile only; warns on `dimmer` |
-| `setColorScene` / `scene` | ✅ all profiles (scenes use default or INI `scene_map`) |
-| `getState` / `getStatus` | ✅ re-publishes retained state |
-| `setColorTemp` | ⚠ unsupported — use `setColor` or a named scene (e.g. `warmWhite`) |
-| `fade` | ⚠ unsupported — use `setBrightness` for immediate level changes |
+| Command | Phase | Notes |
+|---|---|---|
+| `on`, `allOn`, `off`, `allOff` | 2 | Optional `fadeTime` (seconds, float) for timed fade |
+| `setBrightness` | 2 | Optional `fadeTime` |
+| `setColor` | 2 | Optional `fadeTime`; requires `color` capability |
+| `setColorScene` / `scene` | 2 | Sets a named color scene |
+| `getState` / `getStatus` | 2 | Re-publishes retained state |
+| `setColorTemp` | — | ⚠ unsupported — use `setColor` or a named scene |
+| `fade` | 7 | Fade to brightness/color over `fadeTime` seconds |
+| `moveTo`, `home` | 6 | Moving-head motion (see §9c) |
+| `setStrobe` | 7 | Software strobe at given Hz and duty cycle |
+| `stopStrobe` | 7 | Stop software strobe; optionally restore color/brightness |
+| `setDmxStrobe` | 7 | Hardware strobe channel passthrough (requires `strobe` capability) |
+| `dmxStrobeOff` | 7 | Zero hardware strobe channel |
 
 Warning code for unsupported commands: `DMX_CMD_UNSUPPORTED`.
 
-Built-in fixture profiles for Phase 2: `dimmer` (1 ch), `rgb` (3 ch). Additional profiles land in Phase 3.
+### §9d. Fade commands
+
+`on`, `off`, `setBrightness`, `setColor`, and `fade` all accept an optional `fadeTime` parameter.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `fadeTime` | float | No | Fade duration in **seconds** (e.g. `2.5`). `0` or omitted = immediate |
+
+**Examples**
+
+```json
+{ "command": "setBrightness", "brightness": 80, "fadeTime": 3 }
+{ "command": "off", "fadeTime": 2.5 }
+{ "command": "fade", "brightness": 50, "color": { "r": 255, "g": 100, "b": 0 }, "fadeTime": 1.5 }
+```
+
+Fade runs at 30 Hz using chained `setTimeout` ticks. Any new output command issued while a fade is in progress cancels the fade immediately.
+
+### §9e. Software strobe commands
+
+#### setStrobe
+
+```json
+{ "command": "setStrobe", "strobeHz": 5, "strobeDuty": 50, "color": { "r": 255, "g": 255, "b": 255 }, "brightness": 100 }
+```
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `strobeHz` | float | Yes | — | Strobe frequency in Hz (clamped to 0.1–25 Hz) |
+| `strobeDuty` | int | No | `50` | On-phase duty cycle as a percentage (1–99) |
+| `color` | object `{r,g,b}` | No | Current color or white | Color during on-phase |
+| `brightness` | int 0–100 | No | Current brightness or 100 | Brightness during on-phase |
+
+The off-phase zeros all fixture channels. The logical state is preserved so `stopStrobe` can restore it.
+
+**Warning**: `DMX_STROBE_HZ_CLAMPED` — issued when `strobeHz` exceeds 25 Hz; value is clamped.
+
+#### stopStrobe
+
+```json
+{ "command": "stopStrobe" }
+{ "command": "stopStrobe", "brightness": 60 }
+{ "command": "stopStrobe", "color": { "r": 200, "g": 100, "b": 0 }, "brightness": 80 }
+```
+
+Cancels the strobe. With no extra params the fixture is left dark. Optional `color` and `brightness` restore the fixture atomically.
+
+**Events**
+
+| Event | When |
+|---|---|
+| `strobe-started` | `setStrobe` accepted | `strobeHz`, `strobeDuty`, `color`, `brightness` |
+| `strobe-stopped` | `stopStrobe` processed | — |
+
+**State** while strobing includes `strobing: true, strobeHz, strobeDuty`.
+
+### §9f. Hardware strobe passthrough
+
+Requires the `strobe` capability in the fixture profile (e.g. `par-7ch`).
+
+#### setDmxStrobe
+
+Writes a raw 0–255 value to the fixture's hardware strobe channel.
+
+```json
+{ "command": "setDmxStrobe", "value": 180 }
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `value` | int 0–255 | Yes | DMX value for the strobe channel |
+
+#### dmxStrobeOff
+
+Zeroes the hardware strobe channel. No-op on fixtures without a `strobe` slot.
+
+```json
+{ "command": "dmxStrobeOff" }
+```
+
+### §9g. Bridge-level DMX universe commands
+
+Sent to `{pxb_base_topic}/pxb/commands` (the bridge-wide command topic).
+
+| Command | Params | Description |
+|---|---|---|
+| `dmxBlackoutAll` | — | Apply master blackout to **all** configured universes |
+| `dmxRestoreAll` | — | Lift master blackout on all universes |
+| `dmxBlackout` | `universe` (string, default `"default"`) | Blackout a single universe |
+| `dmxRestore` | `universe` (string) | Restore a single universe |
+| `dmxStartRecording` | `universe` (string, default `"default"`) | Begin frame-level recording |
+| `dmxStopRecording` | `universe` (string) | Stop recording; frames available in memory |
+| `dmxPlayRecording` | `universe` (string), `loop` (bool, default `false`) | Play recorded frames |
+| `dmxStopPlayback` | `universe` (string) | Stop playback |
+
+**Master blackout** gates the wire frame to all-zero without clearing the adapter's internal state. Adapters continue writing to the buffer during blackout; `dmxRestoreAll` immediately applies the latest state.
+
+**Recording** captures frame snapshots at each transmission tick (up to 30 Hz). Only frames that differ from the previous snapshot are stored. `playRecording` replays them with the original inter-frame timing.
 
 ## 9b. Effect Commands (`{effect.topic}/commands`)
 

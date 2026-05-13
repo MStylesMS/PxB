@@ -91,22 +91,44 @@ async function main() {
     // --- Node registry (always constructed; tracks runtime node state) ---
     const nodeRegistry = new NodeRegistry(config.nodes);
 
-    // --- DMX universe (constructed eagerly; started after radios) ---
+    // --- DMX universes (constructed eagerly; started after radios) ---
+    // dmxUniverses: Map<label, DmxUniverse>
+    // dmxUniverse: the 'default' universe (or first defined) for backward compat
+    const dmxUniverses = new Map();
     let dmxUniverse = null;
-    if (config.dmx && config.dmx.enabled) {
+
+    for (const [label, busCfg] of Object.entries(config.dmxBuses || {})) {
+        if (!busCfg.enabled) continue;
+        const universe = new DmxUniverse({
+            port:          busCfg.port,
+            interface:     busCfg.interface,
+            refresh_hz:    busCfg.refresh_hz,
+            universe_size: busCfg.universe_size,
+        });
+        universe.on('warning', (w) => {
+            publishBridgeWarning(mqtt, config.mqtt.base_topic, w);
+        });
+        universe.on('state-changed', () => {
+            if (heartbeat) heartbeat.flush();
+        });
+        dmxUniverses.set(label, universe);
+        if (!dmxUniverse) dmxUniverse = universe; // first bus is the legacy singleton
+    }
+    // Legacy: single [dmx] section not already covered by dmxBuses
+    if (!dmxUniverses.size && config.dmx && config.dmx.enabled) {
         dmxUniverse = new DmxUniverse({
             port:          config.dmx.port,
             interface:     config.dmx.interface,
             refresh_hz:    config.dmx.refresh_hz,
             universe_size: config.dmx.universe_size,
         });
-
         dmxUniverse.on('warning', (w) => {
             publishBridgeWarning(mqtt, config.mqtt.base_topic, w);
         });
         dmxUniverse.on('state-changed', () => {
             if (heartbeat) heartbeat.flush();
         });
+        dmxUniverses.set('default', dmxUniverse);
     }
 
     // --- Z-Wave driver (constructed eagerly; started after MQTT is up) ---
@@ -287,9 +309,9 @@ async function main() {
                 zwave: zwaveStatus,
                 zigbee: zigbeeStatus,
             },
-            dmx: dmxUniverse
-                ? { ...dmxUniverse.getStatus() }
-                : (config.dmx ? { enabled: config.dmx.enabled, connected: false } : { enabled: false }),
+            dmx: dmxUniverses.size > 0
+                ? Object.fromEntries([...dmxUniverses.entries()].map(([l, u]) => [l, u.getStatus()]))
+                : { enabled: false },
             nodes: nodeRegistry.getSummary(),
             inclusion,
             subsystems: registry.getSummary(),
@@ -325,6 +347,7 @@ async function main() {
         zigbeeInclusion,
         zigbeeDriver,
         nodeRegistry,
+        dmxUniverses,
     });
 
     // --- Per-node command handler (setRelay / pulseRelay for relay/switch nodes) ---
@@ -357,12 +380,12 @@ async function main() {
         }
     }
 
-    // --- Start DMX universe (after radios) ---
-    if (dmxUniverse) {
+    // --- Start DMX universes (after radios) ---
+    for (const [label, universe] of dmxUniverses.entries()) {
         try {
-            await dmxUniverse.start();
+            await universe.start();
         } catch (err) {
-            logger.error(`DMX universe start failed (will retry): ${err.message}`);
+            logger.error(`DMX universe '${label}' start failed (will retry): ${err.message}`);
         }
     }
 
@@ -415,15 +438,18 @@ async function main() {
                 case 'lifx':
                     adapter = new LifxAdapter({ config: lightConfig, mqttClient: mqtt, logger });
                     break;
-                case 'dmx':
-                    if (!dmxUniverse) {
+                case 'dmx': {
+                    const universeLabel = lightConfig.universe || 'default';
+                    const universe = dmxUniverses.get(universeLabel);
+                    if (!universe) {
                         throw new Error(
-                            `backend=dmx requires a configured and enabled [dmx] section. ` +
-                            `Add [dmx] to the INI or set enabled = true.`
+                            `backend=dmx references universe "${universeLabel}" which is not configured. ` +
+                            `Add [dmx:${universeLabel}] (or [dmx] for the default universe) to the INI.`
                         );
                     }
-                    adapter = new DmxAdapter({ config: lightConfig, mqttClient: mqtt, logger, universe: dmxUniverse });
+                    adapter = new DmxAdapter({ config: lightConfig, mqttClient: mqtt, logger, universe });
                     break;
+                }
                 default:
                     throw new Error(`Unsupported light backend: ${lightConfig.backend}`);
             }
@@ -578,10 +604,12 @@ async function main() {
     // Initialize effect adapters (foggers, strobes, hazers).
     for (const [label, effectConfig] of Object.entries(config.effects || {})) {
         try {
-            if (!dmxUniverse) {
+            const effectUniverseLabel = effectConfig.universe || 'default';
+            const effectUniverse = dmxUniverses.get(effectUniverseLabel);
+            if (!effectUniverse) {
                 throw new Error(
-                    `backend=dmx requires a configured and enabled [dmx] section. ` +
-                    `Add [dmx] to the INI or set enabled = true.`
+                    `backend=dmx references universe "${effectUniverseLabel}" which is not configured. ` +
+                    `Add [dmx:${effectUniverseLabel}] (or [dmx] for the default universe) to the INI.`
                 );
             }
 
@@ -589,7 +617,7 @@ async function main() {
                 config: effectConfig,
                 mqttClient: mqtt,
                 logger,
-                universe: dmxUniverse,
+                universe: effectUniverse,
             });
 
             adapter._subsystemId = `effect-${label}`;
@@ -654,8 +682,8 @@ async function main() {
         if (zigbeeDriver) {
             try { await zigbeeDriver.stop(); } catch (err) { logger.warn(`Zigbee stop error: ${err.message}`); }
         }
-        if (dmxUniverse) {
-            try { await dmxUniverse.dispose(); } catch (err) { logger.warn(`DMX dispose error: ${err.message}`); }
+        for (const [label, universe] of dmxUniverses.entries()) {
+            try { await universe.dispose(); } catch (err) { logger.warn(`DMX universe '${label}' dispose error: ${err.message}`); }
         }
         heartbeat.flush({ state: 'stopping' });
         heartbeat.stop();

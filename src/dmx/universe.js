@@ -65,6 +65,23 @@ class DmxUniverse extends EventEmitter {
         this._backoffMinMs  = opts.backoffMinMs ?? 1000;
         this._backoffMaxMs  = opts.backoffMaxMs ?? 30_000;
         this._currentBackoff = this._backoffMinMs;
+
+        // Master blackout: when active, the wire frame is all-zero but _frame is
+        // still updated by adapters so restore is instant.
+        this._masterBlackedOut = false;
+
+        // Recording: captures frame snapshots at each transmission tick.
+        this._recording = false;
+        this._recordingBuffer = [];  // [{deltaMs, frame: Buffer}]
+        this._recordingStartTime = null;
+        this._lastRecordedFrame  = null;
+        this._lastRecordMs       = null;
+
+        // Playback
+        this._playbackTimer   = null;
+        this._playbackIndex   = 0;
+        this._playbackLoop    = false;
+        this._inPlayback      = false;
     }
 
     get state()     { return this._state; }
@@ -105,16 +122,20 @@ class DmxUniverse extends EventEmitter {
 
     getStatus() {
         return {
-            enabled:       true,
-            connected:     this.connected,
-            port:          this._port,
-            interface:     this._interfaceName,
-            refresh_hz:    this._refreshHz,
-            universe_size: this._universeSize,
-            last_frame_ts: this._lastFrameTs,
-            frame_count:   this._frameCount,
-            last_error:    this._lastError,
-            state:         this._state,
+            enabled:           true,
+            connected:         this.connected,
+            port:              this._port,
+            interface:         this._interfaceName,
+            refresh_hz:        this._refreshHz,
+            universe_size:     this._universeSize,
+            last_frame_ts:     this._lastFrameTs,
+            frame_count:       this._frameCount,
+            last_error:        this._lastError,
+            state:             this._state,
+            master_blackout:   this._masterBlackedOut,
+            recording:         this._recording,
+            recording_frames:  this._recordingBuffer.length,
+            playback_active:   this._playbackTimer !== null,
         };
     }
 
@@ -167,6 +188,7 @@ class DmxUniverse extends EventEmitter {
             await this._iface.sendFrame(this._port, this._frame);
         } catch { /* ignore — port may be gone */ }
 
+        this.stopPlayback();
         this._setState('stopped');
     }
 
@@ -186,8 +208,12 @@ class DmxUniverse extends EventEmitter {
 
             this._sending = true;
             try {
-                await this._iface.sendFrame(this._port, this._frame);
+                const wireFrame = this._masterBlackedOut
+                    ? Buffer.alloc(this._universeSize + 1, 0)
+                    : this._frame;
+                await this._iface.sendFrame(this._port, wireFrame);
                 this._onFrameSuccess();
+                this._recordFrameIfNeeded();
 
                 if (this._state === 'error') {
                     // Recovered
@@ -259,8 +285,116 @@ class DmxUniverse extends EventEmitter {
     }
 
     _clearTimers() {
-        if (this._loopTimer)     { clearTimeout(this._loopTimer);      this._loopTimer     = null; }
-        if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+        if (this._loopTimer)      { clearTimeout(this._loopTimer);       this._loopTimer      = null; }
+        if (this._reconnectTimer) { clearTimeout(this._reconnectTimer);  this._reconnectTimer = null; }
+        if (this._playbackTimer)  { clearTimeout(this._playbackTimer);   this._playbackTimer  = null; }
+    }
+
+    // ── Master blackout ────────────────────────────────────────────────────────────────
+
+    /**
+     * Black out the wire without disturbing the logic frame. Adapters continue
+     * writing to the internal buffer; `masterRestore()` immediately applies those
+     * values to the wire.
+     */
+    masterBlackout() {
+        this._masterBlackedOut = true;
+        this.emit('state-changed');
+        logger.debug('DmxUniverse: master blackout active');
+    }
+
+    /** Lift the master blackout — the current logic frame resumes on the wire. */
+    masterRestore() {
+        this._masterBlackedOut = false;
+        this.emit('state-changed');
+        logger.debug('DmxUniverse: master blackout cleared');
+    }
+
+    // ── Recording ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Begin capturing frame snapshots at each transmission tick.
+     * Only frames that differ from the previous captured frame are stored
+     * (same-frame runs are stored as a single delta-Ms entry with the updated
+     * timestamp so the pause is replayed correctly).
+     */
+    startRecording() {
+        this._recordingBuffer    = [];
+        this._lastRecordedFrame  = null;
+        this._lastRecordMs       = Date.now();
+        this._recording          = true;
+        logger.debug('DmxUniverse: recording started');
+    }
+
+    /**
+     * Stop recording and return the captured frame array.
+     * @returns {{deltaMs: number, frame: Buffer}[]}
+     */
+    stopRecording() {
+        this._recording = false;
+        logger.debug(`DmxUniverse: recording stopped — ${this._recordingBuffer.length} frames`);
+        return this._recordingBuffer;
+    }
+
+    /**
+     * Play back the recorded frame sequence.
+     * @param {boolean} [loop=false]  When true, loops indefinitely until stopPlayback().
+     */
+    playRecording(loop = false) {
+        this.stopPlayback();
+        if (!this._recordingBuffer.length) {
+            logger.warn('DmxUniverse: playRecording called but recording buffer is empty');
+            return;
+        }
+        this._playbackLoop = loop;
+        this._playbackIndex = 0;
+        this._schedulePlaybackStep();
+    }
+
+    /** Stop any active playback immediately. */
+    stopPlayback() {
+        if (this._playbackTimer) {
+            clearTimeout(this._playbackTimer);
+            this._playbackTimer = null;
+        }
+        this._playbackIndex = 0;
+        this._playbackLoop  = false;
+    }
+
+    _schedulePlaybackStep() {
+        const entry = this._recordingBuffer[this._playbackIndex];
+        if (!entry) {
+            if (this._playbackLoop) {
+                this._playbackIndex = 0;
+                this._schedulePlaybackStep();
+            } else {
+                this._playbackTimer = null;
+            }
+            return;
+        }
+        this._playbackTimer = setTimeout(() => {
+            if (!this._playbackTimer) return; // cancelled
+            this._inPlayback = true;
+            entry.frame.copy(this._frame, 0);
+            this._inPlayback = false;
+            this._playbackIndex++;
+            this._schedulePlaybackStep();
+        }, entry.deltaMs);
+        if (typeof this._playbackTimer.unref === 'function') this._playbackTimer.unref();
+    }
+
+    _recordFrameIfNeeded() {
+        if (!this._recording || this._inPlayback) return;
+
+        const now = Date.now();
+        const deltaMs = Math.max(0, now - (this._lastRecordMs ?? now));
+        this._lastRecordMs = now;
+
+        // Only push a new entry when the frame content actually changed
+        if (!this._lastRecordedFrame || !this._frame.equals(this._lastRecordedFrame)) {
+            this._lastRecordedFrame = Buffer.from(this._frame);
+            this._recordingBuffer.push({ deltaMs, frame: Buffer.from(this._frame) });
+        }
     }
 
     _setState(next) {

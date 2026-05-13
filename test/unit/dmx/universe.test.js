@@ -223,3 +223,148 @@ describe('DmxUniverse — state-changed event', () => {
         require('fs').existsSync.mockRestore();
     });
 });
+
+// ── Master blackout ───────────────────────────────────────────────────────
+
+describe('DmxUniverse — masterBlackout / masterRestore', () => {
+    let u, iface;
+
+    beforeEach(async () => {
+        iface = mockIface();
+        u = new DmxUniverse({ port: '/dev/fake', iface, backoffMinMs: 9999 });
+        jest.spyOn(require('fs'), 'existsSync').mockReturnValue(true);
+        await u.start();
+    });
+
+    afterEach(() => {
+        u._shuttingDown = true;
+        u._clearTimers();
+        require('fs').existsSync.mockRestore();
+    });
+
+    it('masterBlackout causes wire frame to be all-zero', async () => {
+        u.setChannel(1, 200);
+        u.masterBlackout();
+
+        // Wait for next tick
+        await new Promise((r) => setTimeout(r, 60));
+
+        const lastFrame = iface.calls[iface.calls.length - 1].frame;
+        expect(lastFrame[1]).toBe(0);
+    });
+
+    it('adapters can still write to _frame during blackout', () => {
+        u.masterBlackout();
+        u.setChannel(5, 180);
+        expect(u._frame[5]).toBe(180);  // internal buffer updated
+    });
+
+    it('masterRestore sends the live frame to the wire', async () => {
+        u.setChannel(1, 200);
+        u.masterBlackout();
+        await new Promise((r) => setTimeout(r, 60));
+
+        // Verify blackout wire
+        const duringBlackout = iface.calls[iface.calls.length - 1].frame;
+        expect(duringBlackout[1]).toBe(0);
+
+        u.masterRestore();
+        await new Promise((r) => setTimeout(r, 60));
+
+        const afterRestore = iface.calls[iface.calls.length - 1].frame;
+        expect(afterRestore[1]).toBe(200);
+    });
+
+    it('getStatus reports master_blackout field', () => {
+        expect(u.getStatus().master_blackout).toBe(false);
+        u.masterBlackout();
+        expect(u.getStatus().master_blackout).toBe(true);
+        u.masterRestore();
+        expect(u.getStatus().master_blackout).toBe(false);
+    });
+
+    it('emits state-changed when blackout toggled', () => {
+        const events = [];
+        u.on('state-changed', () => events.push(1));
+        u.masterBlackout();
+        u.masterRestore();
+        expect(events).toHaveLength(2);
+    });
+});
+
+// ── Recording ────────────────────────────────────────────────────────────
+
+describe('DmxUniverse — recording and playback', () => {
+    let u, iface;
+
+    beforeEach(async () => {
+        iface = mockIface();
+        u = new DmxUniverse({ port: '/dev/fake', iface, backoffMinMs: 9999, refresh_hz: 44 });
+        jest.spyOn(require('fs'), 'existsSync').mockReturnValue(true);
+        await u.start();
+    });
+
+    afterEach(() => {
+        u._shuttingDown = true;
+        u._clearTimers();
+        require('fs').existsSync.mockRestore();
+    });
+
+    it('startRecording clears buffer and sets recording flag', () => {
+        u.startRecording();
+        expect(u._recording).toBe(true);
+        expect(u._recordingBuffer).toHaveLength(0);
+    });
+
+    it('stopRecording returns the buffer and clears flag', async () => {
+        u.startRecording();
+        u.setChannel(1, 100);
+        await new Promise((r) => setTimeout(r, 80));   // let some ticks fire
+        const frames = u.stopRecording();
+        expect(u._recording).toBe(false);
+        expect(Array.isArray(frames)).toBe(true);
+        expect(frames.length).toBeGreaterThan(0);
+        frames.forEach((f) => {
+            expect(typeof f.deltaMs).toBe('number');
+            expect(Buffer.isBuffer(f.frame)).toBe(true);
+        });
+    });
+
+    it('playRecording restores frame snapshots', async () => {
+        // Build a 2-frame recording manually (skip serial I/O timing)
+        u._recordingBuffer = [
+            { deltaMs: 0,  frame: Buffer.from([0, 200, 0, 0, 0]) },
+            { deltaMs: 10, frame: Buffer.from([0, 50,  0, 0, 0]) },
+        ];
+
+        u.playRecording(false);
+
+        // After 0ms the first frame should be written (deltaMs=0)
+        await new Promise((r) => setTimeout(r, 20));
+        // After 20ms the second frame (deltaMs=10) should be written
+        await new Promise((r) => setTimeout(r, 15));
+        expect(u._frame[1]).toBe(50);
+    });
+
+    it('stopPlayback halts sequence and no further frames written', async () => {
+        u._recordingBuffer = [
+            { deltaMs: 0,   frame: Buffer.from([0, 200, 0, 0, 0]) },
+            { deltaMs: 500, frame: Buffer.from([0, 99,  0, 0, 0]) },
+        ];
+
+        u.playRecording(false);
+        await new Promise((r) => setTimeout(r, 5));   // first frame applied
+        u.stopPlayback();
+        expect(u._playbackTimer).toBeNull();
+
+        await new Promise((r) => setTimeout(r, 600));  // second frame would fire here
+        expect(u._frame[1]).not.toBe(99);
+    });
+
+    it('getStatus reports recording and playback_active fields', () => {
+        expect(u.getStatus().recording).toBe(false);
+        expect(u.getStatus().playback_active).toBe(false);
+        u.startRecording();
+        expect(u.getStatus().recording).toBe(true);
+    });
+});

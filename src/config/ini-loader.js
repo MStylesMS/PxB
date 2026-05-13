@@ -85,6 +85,7 @@ function loadConfig(configPath) {
         switches: {},
         effects: {},
         dmx: null,
+        dmxBuses: {},   // label -> parsed dmx config; includes 'default' from legacy [dmx] section
     };
 
     // --- [mqtt] (required) ---
@@ -149,7 +150,7 @@ function loadConfig(configPath) {
         }
     }
 
-    // --- [dmx] (optional) ---
+    // --- [dmx] (optional, legacy singleton) ---
     if (raw.dmx) {
         try {
             const dmx = applySchema(SCHEMA.dmx, raw.dmx, 'dmx');
@@ -168,7 +169,51 @@ function loadConfig(configPath) {
                 errors.push(`[dmx] universe_size must be between 24 and 512, got: ${dmx.universe_size}`);
             }
 
+            dmx.label = 'default';
             config.dmx = dmx;
+            config.dmxBuses['default'] = dmx;
+        } catch (e) {
+            errors.push(e.message);
+        }
+    }
+
+    // --- [dmx:<label>] multi-universe sections ---
+    for (const [sectionKey, sectionVal] of Object.entries(raw)) {
+        if (!sectionKey.startsWith('dmx:')) continue;
+        const label = sectionKey.slice(4).trim();
+
+        if (!VALID_NODE_LABEL.test(label)) {
+            errors.push(`[${sectionKey}] invalid label format — must match [a-z0-9][a-z0-9-]*`);
+            continue;
+        }
+
+        if (config.dmxBuses[label]) {
+            errors.push(`[${sectionKey}] label "${label}" already defined (conflicts with [dmx] singleton)`);
+            continue;
+        }
+
+        try {
+            const bus = applySchema(SCHEMA.dmxBus, sectionVal, sectionKey);
+
+            if (!VALID_DMX_INTERFACES.has(bus.interface)) {
+                errors.push(
+                    `[${sectionKey}] unknown interface "${bus.interface}" — expected: ${[...VALID_DMX_INTERFACES].join(', ')}`
+                );
+            }
+
+            if (bus.refresh_hz < 1 || bus.refresh_hz > 44) {
+                errors.push(`[${sectionKey}] refresh_hz must be between 1 and 44, got: ${bus.refresh_hz}`);
+            }
+
+            if (bus.universe_size < 24 || bus.universe_size > 512) {
+                errors.push(`[${sectionKey}] universe_size must be between 24 and 512, got: ${bus.universe_size}`);
+            }
+
+            bus.label = label;
+            config.dmxBuses[label] = bus;
+
+            // First labelled bus also acts as the legacy singleton if none exists
+            if (!config.dmx) config.dmx = bus;
         } catch (e) {
             errors.push(e.message);
         }

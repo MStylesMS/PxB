@@ -261,15 +261,13 @@ describe('DmxAdapter — setColorScene', () => {
 // ── Unsupported commands ──────────────────────────────────────────────────
 
 describe('DmxAdapter — unsupported commands', () => {
-    it('publishes DMX_CMD_UNSUPPORTED warning for "fade"', async () => {
-        const { adapter, mqtt } = makeAdapter();
+    it('fade with fadeTime=0 applies brightness immediately', async () => {
+        const { adapter, universe, mqtt } = makeAdapter({ config: { fixture: 'par-7ch', address: 1 } });
         await adapter.init();
-        await sendCmd(mqtt, { command: 'fade', brightness: 10, duration: 2 });
-        expect(mqtt.publish).toHaveBeenCalledWith(
-            expect.stringContaining('/warnings'),
-            expect.stringContaining('DMX_CMD_UNSUPPORTED'),
-            expect.any(Object)
-        );
+        await sendCmd(mqtt, { command: 'fade', brightness: 50, fadeTime: 0 });
+        // dimmer channel (ch 1 for par-7ch) should be ~50% = ~128
+        expect(universe.channels[1]).toBeGreaterThanOrEqual(125);
+        expect(universe.channels[1]).toBeLessThanOrEqual(130);
     });
 
     it('publishes DMX_CMD_UNSUPPORTED warning for "setColorTemp"', async () => {
@@ -467,5 +465,294 @@ describe('Mover commands', () => {
         expect(call[2]).toBe(0);   // pan_fine
         expect(call[3]).toBe(110); // tilt
         expect(call[4]).toBe(0);   // tilt_fine
+    });
+});
+
+// ── Fade ─────────────────────────────────────────────────────────────────
+
+describe('DmxAdapter — fade', () => {
+    beforeEach(() => { jest.useFakeTimers(); });
+    afterEach(() => { jest.useRealTimers(); });
+
+    function flushMicrotasks() {
+        return Promise.resolve().then(() => Promise.resolve()).then(() => Promise.resolve());
+    }
+
+    it('setBrightness with fadeTime>0 interpolates channels', async () => {
+        const { adapter, universe } = makeAdapter({ config: { fixture: 'par-7ch', address: 1 } });
+        await adapter.init();
+        // Turn on first so we have a non-zero start
+        const mqtt = adapter.mqttClient;  // we need to reach the mqtt from adapter
+
+        // Actually use the universe for validation — just use fresh adapter approach
+        // We'll verify fade reaches target brightness after full duration
+        const { adapter: a, universe: u, mqtt: m } = makeAdapter({ config: { fixture: 'par-7ch', address: 1 } });
+        await a.init();
+
+        // Set initial brightness to 0 (blackout on init)
+        // Now fade to brightness 100 over 1 second
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+        await cb('', { command: 'setBrightness', brightness: 100, fadeTime: 1 });
+        await flushMicrotasks();
+
+        // Before any tick: dimmer should still be 0 (or the initial value)
+        const before = u.channels[1] ?? 0;
+        expect(before).toBeLessThan(200);
+
+        // Advance past the full fade duration (1000ms)
+        jest.advanceTimersByTime(1100);
+        await flushMicrotasks();
+
+        // After full fade: dimmer channel should be 255
+        expect(u.channels[1]).toBe(255);
+    });
+
+    it('second command cancels in-progress fade', async () => {
+        const { adapter: a, universe: u, mqtt: m } = makeAdapter({ config: { fixture: 'par-7ch', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        // Start a 2-second fade
+        await cb('', { command: 'setBrightness', brightness: 100, fadeTime: 2 });
+        await flushMicrotasks();
+
+        // Advance 500ms — fade is mid-way
+        jest.advanceTimersByTime(500);
+        await flushMicrotasks();
+
+        // Issue immediate setBrightness — should cancel fade and snap to 0
+        await cb('', { command: 'setBrightness', brightness: 0 });
+        await flushMicrotasks();
+
+        expect(u.channels[1]).toBe(0);
+
+        // Advance more time — should NOT continue fading
+        jest.advanceTimersByTime(2000);
+        await flushMicrotasks();
+        expect(u.channels[1]).toBe(0);
+    });
+
+    it('on with fadeTime>0 starts fade', async () => {
+        const { adapter: a, universe: u, mqtt: m } = makeAdapter({ config: { fixture: 'par-7ch', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        await cb('', { command: 'on', brightness: 100, fadeTime: 1 });
+        await flushMicrotasks();
+
+        // Initial channel still low; advance full duration
+        jest.advanceTimersByTime(1100);
+        await flushMicrotasks();
+
+        expect(u.channels[1]).toBe(255);
+    });
+
+    it('off with fadeTime>0 fades to zero', async () => {
+        const { adapter: a, universe: u, mqtt: m } = makeAdapter({ config: { fixture: 'par-7ch', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        // Turn on first
+        await cb('', { command: 'on', brightness: 100 });
+        await flushMicrotasks();
+        expect(u.channels[1]).toBe(255);
+
+        // Fade off
+        await cb('', { command: 'off', fadeTime: 0.5 });
+        await flushMicrotasks();
+
+        jest.advanceTimersByTime(600);
+        await flushMicrotasks();
+
+        expect(u.channels[1]).toBe(0);
+    });
+});
+
+// ── Software strobe ──────────────────────────────────────────────────────
+
+describe('DmxAdapter — software strobe', () => {
+    beforeEach(() => { jest.useFakeTimers(); });
+    afterEach(() => { jest.useRealTimers(); });
+
+    async function flush() {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+    }
+
+    it('setStrobe alternates channels on/off at given Hz', async () => {
+        const { adapter: a, universe: u, mqtt: m } = makeAdapter({ config: { fixture: 'rgb', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        // 1 Hz, 50% duty = 500ms on, 500ms off
+        await cb('', { command: 'setStrobe', strobeHz: 1, strobeDuty: 50,
+            color: { r: 255, g: 255, b: 255 }, brightness: 100 });
+        await flush();
+
+        // Immediately after setStrobe the on-phase runs: R=255
+        expect(u.channels[1]).toBe(255); // red ch 1
+
+        // Advance past on-phase into off-phase
+        jest.advanceTimersByTime(510);
+        await flush();
+        expect(u.channels[1]).toBe(0);   // off-phase: zeroed
+
+        // Advance past off-phase back to on-phase
+        jest.advanceTimersByTime(510);
+        await flush();
+        expect(u.channels[1]).toBe(255); // on again
+    });
+
+    it('stopStrobe cancels strobe and applies blackout by default', async () => {
+        const { adapter: a, universe: u, mqtt: m } = makeAdapter({ config: { fixture: 'rgb', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        await cb('', { command: 'setStrobe', strobeHz: 2, strobeDuty: 50,
+            color: { r: 255, g: 0, b: 0 }, brightness: 100 });
+        await flush();
+
+        await cb('', { command: 'stopStrobe' });
+        await flush();
+
+        expect(u.channels[1]).toBe(0);   // red = 0 (blackout)
+        expect(u.channels[2]).toBe(0);   // green = 0
+        expect(u.channels[3]).toBe(0);   // blue = 0
+
+        // Timer no longer fires
+        jest.advanceTimersByTime(2000);
+        await flush();
+        expect(u.channels[1]).toBe(0);
+    });
+
+    it('stopStrobe with brightness param restores to that brightness', async () => {
+        const { adapter: a, universe: u, mqtt: m } = makeAdapter({ config: { fixture: 'par-7ch', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        await cb('', { command: 'setStrobe', strobeHz: 2, strobeDuty: 50,
+            color: { r: 255, g: 255, b: 255 }, brightness: 100 });
+        await flush();
+
+        await cb('', { command: 'stopStrobe', brightness: 60 });
+        await flush();
+
+        // dimmer ch 1 for par-7ch: 60% = ~153
+        expect(u.channels[1]).toBeGreaterThanOrEqual(150);
+        expect(u.channels[1]).toBeLessThanOrEqual(156);
+    });
+
+    it('any output command cancels strobe', async () => {
+        const { adapter: a, universe: u, mqtt: m } = makeAdapter({ config: { fixture: 'rgb', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        await cb('', { command: 'setStrobe', strobeHz: 2, strobeDuty: 50 });
+        await flush();
+
+        // setColor with explicit brightness cancels strobe and applies color
+        await cb('', { command: 'setColor', color: { r: 100, g: 50, b: 25 }, brightness: 100 });
+        await flush();
+
+        // rgb fixture no dimmer: ch1=red*scale = 100*(100/100) = 100
+        expect(u.channels[1]).toBe(100); // red
+
+        // No more strobe flipping
+        jest.advanceTimersByTime(2000);
+        await flush();
+        expect(u.channels[1]).toBe(100);
+    });
+
+    it('Hz above MAX_STROBE_HZ is clamped with a warning', async () => {
+        const { adapter: a, mqtt: m } = makeAdapter({ config: { fixture: 'rgb', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        await cb('', { command: 'setStrobe', strobeHz: 99, strobeDuty: 50 });
+        await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+
+        const warns = m.publish.mock.calls.filter(([t]) => t.endsWith('/warnings'));
+        expect(warns.length).toBeGreaterThan(0);
+        const warnBody = JSON.parse(warns[warns.length - 1][1]);
+        expect(warnBody.code).toBe('DMX_STROBE_HZ_CLAMPED');
+    });
+
+    it('state includes strobing fields while strobing', async () => {
+        const { adapter: a, mqtt: m } = makeAdapter({ config: { fixture: 'rgb', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        await cb('', { command: 'setStrobe', strobeHz: 5, strobeDuty: 40 });
+        await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+
+        const stateCalls = m.publish.mock.calls.filter(([t]) => t.endsWith('/state'));
+        const last = JSON.parse(stateCalls[stateCalls.length - 1][1]);
+        expect(last.strobing).toBe(true);
+        expect(last.strobeHz).toBe(5);
+        expect(last.strobeDuty).toBe(40);
+    });
+});
+
+// ── Hardware strobe passthrough ───────────────────────────────────────────
+
+describe('DmxAdapter — hardware strobe (setDmxStrobe/dmxStrobeOff)', () => {
+    async function flush() {
+        await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    }
+
+    it('setDmxStrobe sets strobe channel on a par-7ch fixture', async () => {
+        const { adapter: a, universe: u, mqtt: m } = makeAdapter({ config: { fixture: 'par-7ch', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        await cb('', { command: 'setDmxStrobe', value: 128 });
+        await flush();
+
+        // par-7ch channels at address 1: ch1=dimmer, ch2=red, ch3=green, ch4=blue, ch5=strobe, ch6=mode, ch7=speed
+        expect(u.channels[5]).toBe(128);
+    });
+
+    it('dmxStrobeOff zeroes strobe channel', async () => {
+        const { adapter: a, universe: u, mqtt: m } = makeAdapter({ config: { fixture: 'par-7ch', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        await cb('', { command: 'setDmxStrobe', value: 200 });
+        await flush();
+        expect(u.channels[5]).toBe(200);
+
+        await cb('', { command: 'dmxStrobeOff' });
+        await flush();
+        expect(u.channels[5]).toBe(0);
+    });
+
+    it('setDmxStrobe on rgb fixture (no strobe cap) publishes unsupported warning', async () => {
+        const { adapter: a, mqtt: m } = makeAdapter({ config: { fixture: 'rgb', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        await cb('', { command: 'setDmxStrobe', value: 128 });
+        await flush();
+
+        const warns = m.publish.mock.calls.filter(([t]) => t.endsWith('/warnings'));
+        expect(warns.length).toBeGreaterThan(0);
+        const body = JSON.parse(warns[warns.length - 1][1]);
+        // _requireCapability publishes DMX_CMD_UNSUPPORTED then throws; the outer
+        // catch re-publishes DMX_CMD_FAILED — check that any warning was issued.
+        expect(['DMX_CMD_UNSUPPORTED', 'DMX_CMD_FAILED']).toContain(body.code);
+    });
+
+    it('dmxStrobeOff on rgb fixture is a no-op (no error)', async () => {
+        const { adapter: a, universe: u, mqtt: m } = makeAdapter({ config: { fixture: 'rgb', address: 1 } });
+        await a.init();
+        const cb = m._subs['paradox/test/lights/dmx1/commands'];
+
+        await cb('', { command: 'dmxStrobeOff' });
+        await flush();
+
+        const warns = m.publish.mock.calls.filter(([t]) => t.endsWith('/warnings'));
+        // No warning expected — it's a no-op
+        expect(warns.length).toBe(0);
     });
 });

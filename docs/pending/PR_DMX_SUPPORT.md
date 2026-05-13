@@ -480,16 +480,22 @@ When hardware tests pass, commit:
 
 ---
 
-## 11. Phase 7 — Stretch: Multi-Universe, Scenes, Transitions, Network DMX (independent)
+## 11. Phase 7 — Multi-Universe, Fade, Strobe, Blackout, Recording
 
-**Goal:** Bring PxB to parity with mid-range show-control software for the scenarios Paradox actually needs. Treat this as a backlog, not a deliverable date.
+**Status: Implemented** — see commit `Implement: Phase 7`.
 
 Candidate work items, each a separate PR:
-- Multiple `[dmx:<label>]` universes in one PxB process.
-- Server-side scenes / cues with named transitions and durations (real `fade` semantics for DMX).
+- [x] Multiple `[dmx:<label>]` universes in one PxB process.
+- [x] Server-side `fade` command with `fadeTime` parameter (linear interpolation at 30 Hz).
+- [x] Software `setStrobe` / `stopStrobe` (Hz / duty cycle; max 25 Hz; per-color).
+- [x] Hardware strobe passthrough `setDmxStrobe` / `dmxStrobeOff` (requires `strobe` capability).
+- [x] Universe blackout master (`masterBlackout`/`masterRestore`) with bridge-level `dmxBlackoutAll`/`dmxRestoreAll`.
+- [x] DMX recording (frame-level `startRecording` / `stopRecording` / `playRecording` / `stopPlayback`).
+- [x] `tools/dmx-demo/demo.js` — four-sequence visual demo script.
+
+Remaining stretch items (not yet scheduled):
 - sACN (E1.31) and Art-Net network DMX as additional `interface =` values.
-- Universe priority / blackout master.
-- DMX recording + playback for show capture.
+- Named scene cues with sequenced transitions.
 
 ### Recommended AI model
 - **Claude Sonnet — High** for protocol work (sACN/Art-Net) and scene engine timing.

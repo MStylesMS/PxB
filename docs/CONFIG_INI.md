@@ -12,7 +12,8 @@ PxB is configured by a single INI file. Pass the path via `--config` or default 
 | `[global]` | Process-wide defaults | 0–1 |
 | `[zwave]` | Z-Wave radio endpoint | 0–1 |
 | `[zigbee]` | Zigbee radio endpoint | 0–1 |
-| `[dmx]` | DMX512 universe output | 0–1 |
+| `[dmx]` | DMX512 universe output (singleton, label "default") | 0–1 |
+| `[dmx:<label>]` | Named DMX512 universe (multi-universe) | 0–N |
 | `[node:<label>]` | One configured device | 0–N |
 | `[light:<label>]` | One light fixture / Hue bridge / WiZ / LIFX device | 0–N |
 | `[light-zone:<label>]` | Fan-out group across multiple lights | 0–N |
@@ -80,9 +81,14 @@ When `db_path` is set (or defaulted), PxB also writes two companion files in the
 
 File permissions should be `0600` when `network_key` is set.
 
-## `[dmx]`
+## `[dmx]` / `[dmx:<label>]`
 
-Configures one DMX512 output universe. One section per process.
+Configures one or more DMX512 output universes.
+
+- **`[dmx]`** — singleton universe (label `"default"`). Compatible with all existing configs. Only one `[dmx]` section per file.
+- **`[dmx:<label>]`** — named universe. Multiple named sections are supported. `<label>` must match `[a-z0-9][a-z0-9-]*`. You cannot mix `[dmx]` and `[dmx:default]` in the same file.
+
+When multiple universes are configured, `[light:*]` and `[effect:*]` sections may declare which universe to use via the `universe` key (default: `"default"`).
 
 | Key | Type | Required | Default | Description |
 |-----|------|:--------:|---------|-------------|
@@ -97,7 +103,7 @@ Configures one DMX512 output universe. One section per process.
 
 **enttec-pro / DMXKing ultraDMX2 Pro:** uses the Enttec Open Protocol label-6 envelope at 57600 baud 8N1. Hardware validation checklist: `docs/pending/PR_DMX_SUPPORT.md §8`.
 
-Example:
+**Single-universe example (existing style):**
 
 ```ini
 [dmx]
@@ -105,6 +111,27 @@ enabled     = true
 interface   = opendmx
 port        = /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_B002JE1K-if00-port0
 refresh_hz  = 30
+```
+
+**Multi-universe example:**
+
+```ini
+[dmx:stage]
+interface   = opendmx
+port        = /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_stage
+refresh_hz  = 30
+
+[dmx:foyer]
+interface   = enttec-pro
+port        = /dev/serial/by-id/usb-ENTTEC_DMX_USB_PRO_foyer
+refresh_hz  = 25
+
+[light:par1]
+backend     = dmx
+topic       = paradox/houdini/lights/par1
+fixture     = par-7ch
+address     = 1
+universe    = stage            # ← which [dmx:<label>] universe to use (default: "default")
 ```
 
 ## `[effect:<label>]`
@@ -236,6 +263,7 @@ Light device sections are used for direct network/cloud light backends (`hue`, `
 | `fixture` | string | dmx only | — | Fixture profile: `dimmer` or `rgb` (Phase 2); more in Phase 3 |
 | `address` | int | dmx only | `1` | DMX start address for this fixture (1–512) |
 | `positions` | string(JSON) | dmx mover only | `{"home":{"pan":128,"tilt":128}}` | Named pan/tilt positions for `moveTo` command |
+| `universe` | string | dmx only | `"default"` | Which `[dmx:<label>]` universe this fixture belongs to |
 
 `positions` is a JSON object mapping position names to `{ pan, tilt, speed? }` objects. The `home` position is always available (default `pan: 128, tilt: 128`) and can be overridden. Example:
 
