@@ -14,11 +14,14 @@ PxB (Paradox Bridge) is a single-process Node.js service that bridges Z-Wave (an
 
 ## 3. Supported Device Classes
 
-Phase 1 hardware support:
+Current hardware support:
 - **Contact sensors** (input) — open/close events.
 - **Relays / switches** (output) — on/off, pulse.
+- **Network lights** (output) — Philips Hue, WiZ, LIFX.
+- **DMX light output** (output) — one DMX512 universe; `opendmx` (direct FTDI) and `enttec-pro` (Enttec USB Pro / DMXKing ultraDMX2) interfaces. See [`[dmx]`](CONFIG_INI.md#dmx) configuration.
+- **DMX effect output** (output) — foggers, strobes, hazers wired to the same DMX universe as lights but exposed under `[effect:<label>]` sections with a timer-safe command surface (`burst`, `pulse`, `stop`, `setIntensity`). See [`[effect:<label>]`](CONFIG_INI.md#effect-label) configuration.
 
-Additional classes (dimmers, multilevel sensors, thermostats, etc.) are explicitly **out of scope for phase 1** and will be added in later phases as separate PRs.
+Additional classes (dimmers, multilevel sensors, thermostats, etc.) will be added in later phases as separate PRs.
 
 ## 4. Core Responsibilities
 
@@ -54,6 +57,8 @@ INI file. One file per process. Sections:
 - `[global]` — log level, heartbeat interval, discovered topic prefix.
 - `[zwave]` — serial port, network key(s), enable flag.
 - `[zigbee]` — serial port, db path, enable flag (adapter path is fixed to Ember).
+- `[dmx]` — DMX512 universe output via USB-to-DMX cable (one universe per process).
+- `[effect:<label>]` — one per effect device (fogger, strobe, hazer); requires `[dmx]`.
 - `[node:<label>]` — one per known device.
 
 See [CONFIG_INI.md](CONFIG_INI.md) for full key list.
@@ -155,6 +160,8 @@ INI fragment is generated with clearly marked `TODO:` comments for every field r
 - Failed node transitions → per-node warning.
 - Unknown command on a node type → per-node warning, no error.
 - Command referencing unknown node → bridge warning.
+- Subsystem crash (contained) → `SUBSYSTEM_CRASH` warning on `pxb/warnings`.
+- Subsystem permanently disabled → `SUBSYSTEM_QUARANTINED` warning on `pxb/warnings`.
 
 Warnings are JSON: `{ "timestamp", "severity": "info|warn|error", "code", "message", "context": { ... } }`.
 
@@ -167,6 +174,29 @@ Warnings are JSON: `{ "timestamp", "severity": "info|warn|error", "code", "messa
 | MQTT disconnect | Continue radio operation; queue outbound state/events up to a bounded buffer; republish on reconnect (retained messages rewrite naturally). |
 | Malformed INI | Refuse to start; log actionable error. |
 | Unknown command | Publish warning; do not crash. |
+
+## 16.1 Subsystem Fault Isolation
+
+PxB uses in-process fault isolation to prevent a single crashing subsystem from bringing down the rest of the bridge. Every long-lived component (radio driver, output adapter) registers itself with `SubsystemRegistry` before init. The global `uncaughtException` / `unhandledRejection` handlers route attributed errors to the registry instead of calling `process.exit()`.
+
+**Crash budget policy (defaults):**
+
+| Crash count in 60 s window | Action | Status |
+|---------------------------|--------|--------|
+| ≤ 3 | Contain, invoke `onCrash`, continue | `crashed` |
+| 4–10 | Enter `cooling-down` for 60 s; invoke `onCrash` once; suppress further crashes during cooldown | `cooling-down` |
+| ≥ second cooldown cycle exceeded | Quarantine permanently for this process lifetime | `quarantined` |
+| `> crashLimitCool` in a single window | Quarantine immediately | `quarantined` |
+
+**Status values** reported in `pxb/state.subsystems`: `ok | crashed | cooling-down | quarantined | fatal`.
+
+**Subsystem kinds**: `radio | output-adapter | dmx-bus | mqtt | http-api`.
+
+**Criticality**: `fatal` (loss drives process exit) vs. `optional` (contained, process keeps running). MQTT client is `fatal`; radio drivers and output adapters are `optional`.
+
+**Attribution**: `AsyncLocalStorage` tags each async surface (timer callbacks, MQTT subscribe callbacks, driver event listeners) with the owning subsystem id. `AdapterBase.safeCall(label, fn)` re-enters this context before calling `fn` so attribution survives async hops.
+
+See [PR_FAULT_ISOLATION.md](PR_FAULT_ISOLATION.md) for full design rationale and implementation notes.
 
 ## 17. Security Posture
 

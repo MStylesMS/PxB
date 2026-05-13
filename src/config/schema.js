@@ -69,6 +69,12 @@ const SCHEMA = {
         hue_target_id: { required: false, type: 'string' },
         scene_map: { required: false, type: 'string' },
         timeout_s: { required: false, type: 'int', default: 10 },
+        // DMX-specific keys (backend = dmx)
+        fixture:   { required: false, type: 'string' },
+        address:   { required: false, type: 'int', default: 1 },
+        channels:  { required: false, type: 'string' },
+        positions: { required: false, type: 'string' },  // JSON map of named positions for mover fixtures
+        universe:  { required: false, type: 'string', default: 'default' }, // which [dmx:<label>] universe to use
     },
     'light-zone': {
         // Light group sections follow pattern [light-zone:group_name]
@@ -84,15 +90,52 @@ const SCHEMA = {
         port: { required: false, type: 'int' },
         timeout_s: { required: false, type: 'int', default: 10 },
     },
+    dmx: {
+        enabled:         { required: false, type: 'bool',   default: true },
+        interface:       { required: true,  type: 'string' },
+        port:            { required: true,  type: 'path' },
+        refresh_hz:      { required: false, type: 'int',    default: 30 },
+        universe_size:   { required: false, type: 'int',    default: 512 },
+        ftdi_latency_ms: { required: false, type: 'int',    default: 4 },
+        topic:           { required: false, type: 'string' }, // optional MQTT topic for universe-level commands
+    },
+    // dmxBus is the same shape — used for [dmx:<label>] multi-universe sections.
+    // Defined as a reference; actual parsing loops over raw keys in ini-loader.
+    dmxBus: {
+        enabled:         { required: false, type: 'bool',   default: true },
+        interface:       { required: true,  type: 'string' },
+        port:            { required: true,  type: 'path' },
+        refresh_hz:      { required: false, type: 'int',    default: 30 },
+        universe_size:   { required: false, type: 'int',    default: 512 },
+        ftdi_latency_ms: { required: false, type: 'int',    default: 4 },
+        topic:           { required: false, type: 'string' },
+    },
+    effect: {
+        // Effect device sections follow pattern [effect:device_name]
+        backend:     { required: true,  type: 'string' },
+        topic:       { required: true,  type: 'string' },
+        fixture:     { required: true,  type: 'string' },
+        address:     { required: false, type: 'int',    default: 1 },
+        max_run_ms:  { required: false, type: 'int',    default: 4000 },
+        intensity:   { required: false, type: 'int',    default: 100 },
+        strobe_rate: { required: false, type: 'int',    default: 128 },
+        fan_speed:   { required: false, type: 'int',    default: 0 },
+        universe:    { required: false, type: 'string', default: 'default' },  // which [dmx:<label>] universe to use
+    },
 };
 
 const VALID_NODE_LABEL = /^[a-z0-9][a-z0-9-]*$/;
 const VALID_RADIOS = new Set(['zwave', 'zigbee']);
 const VALID_TYPES = new Set(['contact', 'relay', 'switch', 'motion', 'custom']);
-const VALID_LIGHT_BACKENDS = new Set(['hue', 'lifx', 'wiz']);
+const VALID_LIGHT_BACKENDS = new Set(['hue', 'lifx', 'wiz', 'dmx']);
 const VALID_HUE_TARGET_TYPES = new Set(['all', 'group', 'light']);
 const VALID_SWITCH_BACKENDS = new Set(['shelly']);
 const VALID_ZONE_TYPES = new Set(['lights', 'switches']);
+const VALID_DMX_INTERFACES = new Set(['opendmx', 'enttec-pro']);
+const IMPLEMENTED_DMX_INTERFACES = new Set(['opendmx', 'enttec-pro']);
+
+const VALID_EFFECT_BACKENDS = new Set(['dmx']);
+const VALID_EFFECT_FIXTURES  = new Set(['fogger-1ch', 'fogger-2ch', 'strobe-2ch', 'hazer-2ch']);
 
 module.exports = {
     SCHEMA,
@@ -103,4 +146,8 @@ module.exports = {
     VALID_HUE_TARGET_TYPES,
     VALID_SWITCH_BACKENDS,
     VALID_ZONE_TYPES,
+    VALID_DMX_INTERFACES,
+    IMPLEMENTED_DMX_INTERFACES,
+    VALID_EFFECT_BACKENDS,
+    VALID_EFFECT_FIXTURES,
 };

@@ -11,6 +11,9 @@ const {
     VALID_LIGHT_BACKENDS,
     VALID_HUE_TARGET_TYPES,
     VALID_SWITCH_BACKENDS,
+    VALID_DMX_INTERFACES,
+    VALID_EFFECT_BACKENDS,
+    VALID_EFFECT_FIXTURES,
 } = require('./schema');
 
 /**
@@ -80,6 +83,9 @@ function loadConfig(configPath) {
         lights: {},
         light_zones: {},
         switches: {},
+        effects: {},
+        dmx: null,
+        dmxBuses: {},   // label -> parsed dmx config; includes 'default' from legacy [dmx] section
     };
 
     // --- [mqtt] (required) ---
@@ -144,8 +150,77 @@ function loadConfig(configPath) {
         }
     }
 
-    // --- [node:<label>] sections ---
-    const seenTopics = new Map(); // base_topic -> label
+    // --- [dmx] (optional, legacy singleton) ---
+    if (raw.dmx) {
+        try {
+            const dmx = applySchema(SCHEMA.dmx, raw.dmx, 'dmx');
+
+            if (!VALID_DMX_INTERFACES.has(dmx.interface)) {
+                errors.push(
+                    `[dmx] unknown interface "${dmx.interface}" — expected: ${[...VALID_DMX_INTERFACES].join(', ')}`
+                );
+            }
+
+            if (dmx.refresh_hz < 1 || dmx.refresh_hz > 44) {
+                errors.push(`[dmx] refresh_hz must be between 1 and 44, got: ${dmx.refresh_hz}`);
+            }
+
+            if (dmx.universe_size < 24 || dmx.universe_size > 512) {
+                errors.push(`[dmx] universe_size must be between 24 and 512, got: ${dmx.universe_size}`);
+            }
+
+            dmx.label = 'default';
+            config.dmx = dmx;
+            config.dmxBuses['default'] = dmx;
+        } catch (e) {
+            errors.push(e.message);
+        }
+    }
+
+    // --- [dmx:<label>] multi-universe sections ---
+    for (const [sectionKey, sectionVal] of Object.entries(raw)) {
+        if (!sectionKey.startsWith('dmx:')) continue;
+        const label = sectionKey.slice(4).trim();
+
+        if (!VALID_NODE_LABEL.test(label)) {
+            errors.push(`[${sectionKey}] invalid label format — must match [a-z0-9][a-z0-9-]*`);
+            continue;
+        }
+
+        if (config.dmxBuses[label]) {
+            errors.push(`[${sectionKey}] label "${label}" already defined (conflicts with [dmx] singleton)`);
+            continue;
+        }
+
+        try {
+            const bus = applySchema(SCHEMA.dmxBus, sectionVal, sectionKey);
+
+            if (!VALID_DMX_INTERFACES.has(bus.interface)) {
+                errors.push(
+                    `[${sectionKey}] unknown interface "${bus.interface}" — expected: ${[...VALID_DMX_INTERFACES].join(', ')}`
+                );
+            }
+
+            if (bus.refresh_hz < 1 || bus.refresh_hz > 44) {
+                errors.push(`[${sectionKey}] refresh_hz must be between 1 and 44, got: ${bus.refresh_hz}`);
+            }
+
+            if (bus.universe_size < 24 || bus.universe_size > 512) {
+                errors.push(`[${sectionKey}] universe_size must be between 24 and 512, got: ${bus.universe_size}`);
+            }
+
+            bus.label = label;
+            config.dmxBuses[label] = bus;
+
+            // First labelled bus also acts as the legacy singleton if none exists
+            if (!config.dmx) config.dmx = bus;
+        } catch (e) {
+            errors.push(e.message);
+        }
+    }
+
+    // --- [node:<label>] sections --- // base_topic -> label
+    const seenTopics  = new Map(); // base_topic -> label
     const seenNodeIds = new Map(); // `${radio}:${node_id}` -> label
 
     for (const [sectionKey, sectionVal] of Object.entries(raw)) {
@@ -265,6 +340,19 @@ function loadConfig(configPath) {
             errors.push(`[${sectionKey}] backend=wiz requires "host"`);
         }
 
+        if (light.backend === 'dmx') {
+            if (!light.fixture) {
+                errors.push(`[${sectionKey}] backend=dmx requires "fixture" (e.g. fixture = rgb or fixture = par-7ch)`);
+            }
+            if (light.fixture === 'custom' && !light.channels) {
+                errors.push(`[${sectionKey}] fixture=custom requires a "channels" key (e.g. channels = dimmer:1,red:2,green:3,blue:4)`);
+            }
+            const addr = light.address || 1;
+            if (addr < 1 || addr > 512) {
+                errors.push(`[${sectionKey}] address must be between 1 and 512, got: ${addr}`);
+            }
+        }
+
         if (seenLightTopics.has(light.topic)) {
             errors.push(`[${sectionKey}] topic "${light.topic}" already used by light "${seenLightTopics.get(light.topic)}"`);
         } else {
@@ -341,6 +429,57 @@ function loadConfig(configPath) {
 
         sw.label = label;
         config.switches[label] = sw;
+    }
+
+    // --- [effect:<label>] sections ---
+    const seenEffectTopics = new Map();
+    for (const [sectionKey, sectionVal] of Object.entries(raw)) {
+        if (!sectionKey.startsWith('effect:')) continue;
+        const label = sectionKey.slice(7).trim();
+
+        if (!VALID_NODE_LABEL.test(label)) {
+            errors.push(`[${sectionKey}] invalid label format — must match [a-z0-9][a-z0-9-]*`);
+            continue;
+        }
+
+        let effect;
+        try {
+            effect = applySchema(SCHEMA.effect, sectionVal, sectionKey);
+        } catch (e) {
+            errors.push(e.message);
+            continue;
+        }
+
+        if (!VALID_EFFECT_BACKENDS.has(effect.backend)) {
+            errors.push(
+                `[${sectionKey}] unknown backend "${effect.backend}" — expected: ${[...VALID_EFFECT_BACKENDS].join(', ')}`
+            );
+        }
+
+        if (!VALID_EFFECT_FIXTURES.has(effect.fixture)) {
+            errors.push(
+                `[${sectionKey}] unknown fixture "${effect.fixture}" — expected: ${[...VALID_EFFECT_FIXTURES].join(', ')}. ` +
+                `Custom fixtures are not supported for effect devices.`
+            );
+        }
+
+        const addr = effect.address || 1;
+        if (addr < 1 || addr > 512) {
+            errors.push(`[${sectionKey}] address must be between 1 and 512, got: ${addr}`);
+        }
+
+        if (effect.max_run_ms < 1 || effect.max_run_ms > 30000) {
+            errors.push(`[${sectionKey}] max_run_ms must be between 1 and 30000, got: ${effect.max_run_ms}`);
+        }
+
+        if (seenEffectTopics.has(effect.topic)) {
+            errors.push(`[${sectionKey}] topic "${effect.topic}" already used by effect "${seenEffectTopics.get(effect.topic)}"`);
+        } else {
+            seenEffectTopics.set(effect.topic, label);
+        }
+
+        effect.label = label;
+        config.effects[label] = effect;
     }
 
     // At least one radio must be present when node sections are defined.

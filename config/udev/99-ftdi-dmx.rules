@@ -1,0 +1,15 @@
+# /etc/udev/rules.d/99-ftdi-dmx.rules
+#
+# FTDI FT232R USB UART — USB-to-DMX cable
+#
+# Sets latency_timer to 4 ms (down from the default 16 ms) on plug-in.
+# This reduces DMX frame jitter without requiring manual sudo writes.
+#
+# ATTRS (plural) walks up the device hierarchy to match USB idVendor/idProduct.
+# ATTR  (singular) writes to the usb-serial device's own latency_timer sysfs node.
+#
+# Verify with: cat /sys/bus/usb-serial/devices/ttyUSBx/latency_timer
+#
+ACTION=="add", SUBSYSTEM=="usb-serial", DRIVER=="ftdi_sio", \
+    ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
+    ATTR{latency_timer}="4"

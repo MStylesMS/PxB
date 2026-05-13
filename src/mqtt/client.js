@@ -4,11 +4,23 @@ const mqtt = require('mqtt');
 const logger = require('../util/logger');
 
 class MqttClient {
-    constructor(mqttConfig) {
+    constructor(mqttConfig, registry) {
         this._cfg = mqttConfig;
         this._client = null;
         this._ready = false;
         this._handlers = []; // { topic, fn }
+
+        if (registry) {
+            registry.register({
+                id: 'mqtt-client',
+                kind: 'mqtt',
+                criticality: 'fatal',
+                onCrash: async (_err) => {
+                    // Criticality 'fatal' means the global handler takes the shutdown path
+                    // before onCrash is ever invoked. This is a safety no-op.
+                },
+            });
+        }
     }
 
     /**

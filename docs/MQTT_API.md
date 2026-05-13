@@ -56,11 +56,30 @@ Retained. Republished every `heartbeat_interval` seconds.
     "zigbee": { "enabled": false }
   },
   "nodes": { "total": 4, "ready": 4, "failed": 0, "interviewing": 0 },
-  "inclusion": { "active": false, "radio": null, "mode": null, "started_at": null, "timeout_ms": null }
+  "inclusion": { "active": false, "radio": null, "mode": null, "started_at": null, "timeout_ms": null },
+  "subsystems": {
+    "mqtt-client":  "ok",
+    "zwave-driver": "ok",
+    "zigbee-driver": "ok",
+    "light-mirror": "ok",
+    "switch-fogger": "crashed"
+  }
 }
 ```
 
 `state ∈ {ok, degraded, error, starting, stopping}` (when inclusion/exclusion is active, `inclusion.active=true` and `inclusion.mode ∈ {inclusion, exclusion}`).
+
+`subsystems` maps each registered subsystem id to its status. Status values:
+
+| Status | Meaning |
+|--------|---------|
+| `ok` | Subsystem is running normally |
+| `crashed` | Subsystem threw an unhandled error; it has been contained and stopped. The rest of PxB is still running. |
+| `cooling-down` | Subsystem is crash-looping (4–10 crashes in 60 s); further `onCrash` invocations are suppressed for 60 s. |
+| `quarantined` | Subsystem exceeded the crash budget across multiple cooldown cycles; it is permanently disabled until the next PxB restart. |
+| `fatal` | Reserved for future use (fatal subsystem crash drives process exit before status can be written) |
+
+Subsystem ids follow the convention `<kind>-<label>`, e.g. `light-mirror`, `switch-fogger`, `zwave-driver`.
 
 ## 4. Bridge Commands (`pzb/commands`)
 
@@ -95,6 +114,10 @@ Standard codes (phase 1):
 - `INCLUSION_TIMEOUT`, `EXCLUSION_TIMEOUT`
 - `UNKNOWN_NODE_COMMAND`
 - `CONFIG_VALIDATION_WARNING`
+
+Standard codes (fault isolation):
+- `SUBSYSTEM_CRASH` — An optional subsystem threw an uncaught exception or unhandled rejection. The process kept running; the subsystem has been stopped. Payload `context` includes `subsystem_id` (e.g. `light-mirror`) and `kind` (e.g. `output-adapter`). Severity: `error`.
+- `SUBSYSTEM_QUARANTINED` — A subsystem exceeded its crash budget and has been permanently disabled for the lifetime of this process. Payload `context` includes `subsystem_id`, `kind`, `crash_count`, and `window_s`. Severity: `error`.
 
 ## 6. Discovery Notices (`pzb/discovered/<radio>/<id>`)
 
@@ -198,7 +221,7 @@ Unknown commands produce a per-node warning and are ignored.
 
 ## 9a. Light Commands (`{light.topic}/commands`)
 
-For configured light backends (`hue`, `wiz`, `lifx`), PxB accepts light-zone commands on the same Paradox command topic shape:
+For configured light backends (`hue`, `wiz`, `lifx`, `dmx`), PxB accepts light-zone commands on the same Paradox command topic shape:
 
 ```json
 { "command": "scene", "scene": "cyan" }
@@ -225,6 +248,244 @@ Built-in scene names are aligned across Hue/WiZ/LIFX and can be tuned per backen
 PxB fans a command out to each member light adapter, and each adapter should apply
 the supported parts of the request while publishing warnings when the request asks
 for a capability that backend cannot satisfy.
+
+### DMX backend command surface (`backend = dmx`, Phase 7)
+
+The `dmx` backend supports the full command surface below. Unsupported commands
+are **acknowledged with a structured warning** on `{topic}/warnings` and never silently dropped.
+
+| Command | Phase | Notes |
+|---|---|---|
+| `on`, `allOn`, `off`, `allOff` | 2 | Optional `fadeTime` (seconds, float) for timed fade |
+| `setBrightness` | 2 | Optional `fadeTime` |
+| `setColor` | 2 | Optional `fadeTime`; requires `color` capability |
+| `setColorScene` / `scene` | 2 | Sets a named color scene |
+| `getState` / `getStatus` | 2 | Re-publishes retained state |
+| `setColorTemp` | — | ⚠ unsupported — use `setColor` or a named scene |
+| `fade` | 7 | Fade to brightness/color over `fadeTime` seconds |
+| `moveTo`, `home` | 6 | Moving-head motion (see §9c) |
+| `setStrobe` | 7 | Software strobe at given Hz and duty cycle |
+| `stopStrobe` | 7 | Stop software strobe; optionally restore color/brightness |
+| `setDmxStrobe` | 7 | Hardware strobe channel passthrough (requires `strobe` capability) |
+| `dmxStrobeOff` | 7 | Zero hardware strobe channel |
+
+Warning code for unsupported commands: `DMX_CMD_UNSUPPORTED`.
+
+### §9d. Fade commands
+
+`on`, `off`, `setBrightness`, `setColor`, and `fade` all accept an optional `fadeTime` parameter.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `fadeTime` | float | No | Fade duration in **seconds** (e.g. `2.5`). `0` or omitted = immediate |
+
+**Examples**
+
+```json
+{ "command": "setBrightness", "brightness": 80, "fadeTime": 3 }
+{ "command": "off", "fadeTime": 2.5 }
+{ "command": "fade", "brightness": 50, "color": { "r": 255, "g": 100, "b": 0 }, "fadeTime": 1.5 }
+```
+
+Fade runs at 30 Hz using chained `setTimeout` ticks. Any new output command issued while a fade is in progress cancels the fade immediately.
+
+### §9e. Software strobe commands
+
+#### setStrobe
+
+```json
+{ "command": "setStrobe", "strobeHz": 5, "strobeDuty": 50, "color": { "r": 255, "g": 255, "b": 255 }, "brightness": 100 }
+```
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `strobeHz` | float | Yes | — | Strobe frequency in Hz (clamped to 0.1–25 Hz) |
+| `strobeDuty` | int | No | `50` | On-phase duty cycle as a percentage (1–99) |
+| `color` | object `{r,g,b}` | No | Current color or white | Color during on-phase |
+| `brightness` | int 0–100 | No | Current brightness or 100 | Brightness during on-phase |
+
+The off-phase zeros all fixture channels. The logical state is preserved so `stopStrobe` can restore it.
+
+**Warning**: `DMX_STROBE_HZ_CLAMPED` — issued when `strobeHz` exceeds 25 Hz; value is clamped.
+
+#### stopStrobe
+
+```json
+{ "command": "stopStrobe" }
+{ "command": "stopStrobe", "brightness": 60 }
+{ "command": "stopStrobe", "color": { "r": 200, "g": 100, "b": 0 }, "brightness": 80 }
+```
+
+Cancels the strobe. With no extra params the fixture is left dark. Optional `color` and `brightness` restore the fixture atomically.
+
+**Events**
+
+| Event | When |
+|---|---|
+| `strobe-started` | `setStrobe` accepted | `strobeHz`, `strobeDuty`, `color`, `brightness` |
+| `strobe-stopped` | `stopStrobe` processed | — |
+
+**State** while strobing includes `strobing: true, strobeHz, strobeDuty`.
+
+### §9f. Hardware strobe passthrough
+
+Requires the `strobe` capability in the fixture profile (e.g. `par-7ch`).
+
+#### setDmxStrobe
+
+Writes a raw 0–255 value to the fixture's hardware strobe channel.
+
+```json
+{ "command": "setDmxStrobe", "value": 180 }
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `value` | int 0–255 | Yes | DMX value for the strobe channel |
+
+#### dmxStrobeOff
+
+Zeroes the hardware strobe channel. No-op on fixtures without a `strobe` slot.
+
+```json
+{ "command": "dmxStrobeOff" }
+```
+
+### §9g. Bridge-level DMX universe commands
+
+Sent to `{pxb_base_topic}/pxb/commands` (the bridge-wide command topic).
+
+| Command | Params | Description |
+|---|---|---|
+| `dmxBlackoutAll` | — | Apply master blackout to **all** configured universes |
+| `dmxRestoreAll` | — | Lift master blackout on all universes |
+| `dmxBlackout` | `universe` (string, default `"default"`) | Blackout a single universe |
+| `dmxRestore` | `universe` (string) | Restore a single universe |
+| `dmxStartRecording` | `universe` (string, default `"default"`) | Begin frame-level recording |
+| `dmxStopRecording` | `universe` (string) | Stop recording; frames available in memory |
+| `dmxPlayRecording` | `universe` (string), `loop` (bool, default `false`) | Play recorded frames |
+| `dmxStopPlayback` | `universe` (string) | Stop playback |
+
+**Master blackout** gates the wire frame to all-zero without clearing the adapter's internal state. Adapters continue writing to the buffer during blackout; `dmxRestoreAll` immediately applies the latest state.
+
+**Recording** captures frame snapshots at each transmission tick (up to 30 Hz). Only frames that differ from the previous snapshot are stored. `playRecording` replays them with the original inter-frame timing.
+
+## 9b. Effect Commands (`{effect.topic}/commands`)
+
+Effect adapters control short-duration effect devices (foggers, strobes, hazers). Commands use the same `{ "command": "...", ...params }` envelope as all PxB adapters.
+
+| Command | Required params | Optional params | Description |
+|---|---|---|---|
+| `burst` | `duration_ms` (integer ≥ 1) | `intensity` (0–100, default = config `intensity`) | Fire output for `duration_ms` ms then auto-stop. Rejected if `duration_ms` > config `max_run_ms`. |
+| `pulse` | `duration_ms` (integer ≥ 1) | `intensity` (0–100) | Alias for `burst`. |
+| `stop` | — | — | Immediately zero all channels and cancel any running timer. |
+| `setIntensity` | `intensity` (0–100) | — | Set output level without a timer (stays on until `stop` or overwritten). |
+| `getStatus` | — | — | Re-publish current state to `{effect.topic}/state`. |
+
+### State (`{effect.topic}/state`) — retained
+
+```json
+{
+  "on":         false,
+  "intensity":  0,
+  "expires_at": null,
+  "fixture":    "fogger-1ch",
+  "address":    1,
+  "timestamp":  "2026-05-12T10:00:00.000Z"
+}
+```
+
+`expires_at` is an ISO-8601 timestamp when the current burst will auto-stop, or `null` if no timer is running.
+
+### Events (`{effect.topic}/events`)
+
+| Event | When | Extra fields |
+|---|---|---|
+| `burst-started` | Burst begins | `intensity`, `duration_ms`, `expires_at` |
+| `burst-ended`   | Auto-stop after timer expires | `intensity` |
+| `stopped`       | Manual `stop` command (was running) | — |
+| `intensity-updated` | `setIntensity` processed | `intensity` |
+
+### Warning codes
+
+| Code | Meaning |
+|---|---|
+| `EFFECT_CMD_INVALID` | Malformed payload or missing required parameter |
+| `EFFECT_CMD_UNKNOWN` | Unrecognised command name |
+| `EFFECT_DURATION_CAPPED` | `duration_ms` exceeds `max_run_ms`; command rejected |
+
+### Safety
+
+Every effect adapter enforces a `max_run_ms` ceiling (INI key, default 4000). Any burst/pulse with `duration_ms > max_run_ms` is rejected with an `EFFECT_DURATION_CAPPED` warning — the device never fires. On adapter `dispose()` (including process shutdown), all channels are zeroed and the timer is cancelled.
+
+## 9c. Mover Commands (`{light.topic}/commands`)
+
+Moving-head fixtures (profiles `mover-8ch`, `mover-12ch`, `mover-basic`) expose pan/tilt motion commands in addition to all standard light commands.
+
+### moveTo
+
+Move the fixture to an absolute position.
+
+```json
+{ "command": "moveTo", "position": "stage-left" }
+```
+
+Or using raw values (0–255):
+
+```json
+{ "command": "moveTo", "pan": 100, "tilt": 80, "speed": 0 }
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `position` | string | Either `position` or `pan`/`tilt` | Named position defined in the `positions` INI key |
+| `pan` | integer 0–255 | See above | Raw coarse pan value |
+| `tilt` | integer 0–255 | See above | Raw coarse tilt value |
+| `speed` | integer 0–255 | No (default 0) | Movement speed (0 = max speed on most fixtures) |
+
+If `position` is given and `pan`/`tilt` are also present they are ignored; the named position wins.
+
+### home
+
+Return the fixture to the home position (default: pan 128, tilt 128; overridable via the `positions` config key).
+
+```json
+{ "command": "home" }
+```
+
+### State shape for mover fixtures
+
+When the fixture profile includes the `pan` capability, the state payload includes two additional fields:
+
+```json
+{
+  "timestamp": "2024-01-01T00:00:00.000Z",
+  "on": true,
+  "brightness": 100,
+  "color": null,
+  "scene": null,
+  "fixture": "mover-8ch",
+  "address": 1,
+  "pan": 128,
+  "tilt": 128
+}
+```
+
+`pan` and `tilt` are `null` until the first `moveTo` or `home` command is processed.
+
+### Events
+
+| Event | When | Extra fields |
+|---|---|---|
+| `moved` | Position command applied | `pan`, `tilt` |
+
+### Warning codes
+
+| Code | Meaning |
+|---|---|
+| `DMX_POSITION_UNKNOWN` | Named position not found in the fixture's `positions` map |
+| `DMX_CMD_INVALID` | `moveTo` received with neither `position` name nor `pan`/`tilt` values |
+| `DMX_CMD_UNSUPPORTED` | Motion command sent to a fixture without `pan` capability |
 
 ## 10. Per-Node Warnings (`{node.base_topic}/warnings`)
 

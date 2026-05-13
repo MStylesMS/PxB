@@ -63,23 +63,22 @@ class ShellyAdapter extends AdapterBase {
         }
 
         const commandTopic = `${this.config.topic}/commands`;
-        this.mqttClient.subscribe(commandTopic, (msg) => {
-            this._handleCommand(msg).catch((err) => {
-                this.logger.error(`ShellyAdapter: Command handler error: ${err.message}`);
-            });
-        });
+        this.mqttClient.subscribe(commandTopic, (msg) =>
+            this.safeCall('command', () => this._handleCommand(msg)));
         this._subscribed = true;
 
         this._publishState();
 
-        this.updateTimer = setInterval(() => {
-            this._fetchRelayStatus().then((relays) => {
+        // eslint-disable-next-line no-restricted-syntax -- safeCall wraps this callback
+        this.updateTimer = setInterval(() => this.safeCall('poll', async () => {
+            try {
+                const relays = await this._fetchRelayStatus();
                 this.relays = relays;
                 this._publishState();
-            }).catch((err) => {
+            } catch (err) {
                 this.logger.warn(`ShellyAdapter: Poll failed: ${err.message}`);
-            });
-        }, 5000);
+            }
+        }), 5000);
 
         this.logger.info('ShellyAdapter: Initialized');
     }
@@ -142,6 +141,7 @@ class ShellyAdapter extends AdapterBase {
         const channel = payload.channel !== undefined ? payload.channel : this.channel;
         const durationMs = payload.duration_ms || 500;
         await this._relayAction(channel, 'on');
+        // eslint-disable-next-line no-restricted-syntax -- promise-wrapping delay, errors propagate through executeCommand
         await new Promise((r) => setTimeout(r, durationMs));
         await this._relayAction(channel, 'off');
         this.publishEvent('relay-pulsed', { channel, duration_ms: durationMs });

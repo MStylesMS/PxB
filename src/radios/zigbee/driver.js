@@ -44,6 +44,8 @@ class ZigbeeDriver extends EventEmitter {
      * @param {object} [opts.controllerFactory] - injectable for tests; defaults to herdsman.Controller
      * @param {number} [opts.backoffMinMs=1000]
      * @param {number} [opts.backoffMaxMs=30000]
+     * @param {import('../../bridge/subsystem-registry').SubsystemRegistry} [opts.registry]
+     *   - If provided, the driver registers itself for fault containment.
      */
     constructor(opts) {
         super();
@@ -68,6 +70,23 @@ class ZigbeeDriver extends EventEmitter {
         this._currentBackoff = this._backoffMinMs;
         this._reconnectTimer = null;
         this._shuttingDown = false;
+
+        if (opts.registry) {
+            opts.registry.register({
+                id: 'zigbee-driver',
+                kind: 'radio',
+                criticality: 'optional',
+                onCrash: async (_err) => {
+                    // Stop the reconnect loop so we don't spin after a contained crash.
+                    this._shuttingDown = true;
+                    if (this._reconnectTimer) {
+                        clearTimeout(this._reconnectTimer);
+                        this._reconnectTimer = null;
+                    }
+                    this._setState('error');
+                },
+            });
+        }
     }
 
     get state() { return this._state; }

@@ -36,6 +36,7 @@ class BridgeCommandHandler {
         zwaveInclusion = null, zwaveDriver = null,
         zigbeeInclusion = null, zigbeeDriver = null,
         nodeRegistry = null,
+        dmxUniverses = null,   // Map<label, DmxUniverse>
     }) {
         this._mqtt = mqttClient;
         this._topics = bridgeTopics(baseTopic);
@@ -46,6 +47,7 @@ class BridgeCommandHandler {
         this._zigbeeInclusion = zigbeeInclusion;
         this._zigbeeDriver = zigbeeDriver;
         this._registry = nodeRegistry;
+        this._dmxUniverses = dmxUniverses;  // Map<label, DmxUniverse>
 
         this._mqtt.subscribe(this._topics.commands, (topic, payload) => {
             this._dispatch(payload).catch((err) => {
@@ -85,6 +87,22 @@ class BridgeCommandHandler {
                 return this._handleRefreshNode(payload);
             case 'removeFailedNode':
                 return this._handleRemoveFailedNode(payload);
+            case 'dmxBlackoutAll':
+                return this._handleDmxBlackoutAll();
+            case 'dmxRestoreAll':
+                return this._handleDmxRestoreAll();
+            case 'dmxBlackout':
+                return this._handleDmxBlackout(payload);
+            case 'dmxRestore':
+                return this._handleDmxRestore(payload);
+            case 'dmxStartRecording':
+                return this._handleDmxStartRecording(payload);
+            case 'dmxStopRecording':
+                return this._handleDmxStopRecording(payload);
+            case 'dmxPlayRecording':
+                return this._handleDmxPlayRecording(payload);
+            case 'dmxStopPlayback':
+                return this._handleDmxStopPlayback(payload);
             default:
                 logger.warn(`Bridge command: unknown command "${command}"`);
                 this._publishWarning({
@@ -358,6 +376,86 @@ class BridgeCommandHandler {
                 context: { node_id: resolved.nodeId, radio: 'zwave' },
             });
         }
+    }
+
+    // ── DMX universe commands ────────────────────────────────────────────────
+
+    _getDmxUniverse(label = 'default') {
+        if (!this._dmxUniverses) return null;
+        return this._dmxUniverses.get(label) || null;
+    }
+
+    _handleDmxBlackoutAll() {
+        if (!this._dmxUniverses || this._dmxUniverses.size === 0) {
+            this._publishWarning({ severity: 'warn', code: 'DMX_NOT_CONFIGURED', message: 'No DMX universes configured' });
+            return;
+        }
+        for (const universe of this._dmxUniverses.values()) universe.masterBlackout();
+        logger.info('Bridge: master blackout applied to all DMX universes');
+    }
+
+    _handleDmxRestoreAll() {
+        if (!this._dmxUniverses || this._dmxUniverses.size === 0) return;
+        for (const universe of this._dmxUniverses.values()) universe.masterRestore();
+        logger.info('Bridge: master restore applied to all DMX universes');
+    }
+
+    _handleDmxBlackout({ universe: label = 'default' } = {}) {
+        const u = this._getDmxUniverse(label);
+        if (!u) {
+            this._publishWarning({ severity: 'warn', code: 'DMX_UNIVERSE_NOT_FOUND',
+                message: `DMX universe "${label}" not found`, context: { universe: label } });
+            return;
+        }
+        u.masterBlackout();
+        logger.info(`Bridge: master blackout applied to DMX universe '${label}'`);
+    }
+
+    _handleDmxRestore({ universe: label = 'default' } = {}) {
+        const u = this._getDmxUniverse(label);
+        if (!u) {
+            this._publishWarning({ severity: 'warn', code: 'DMX_UNIVERSE_NOT_FOUND',
+                message: `DMX universe "${label}" not found`, context: { universe: label } });
+            return;
+        }
+        u.masterRestore();
+        logger.info(`Bridge: master restore applied to DMX universe '${label}'`);
+    }
+
+    _handleDmxStartRecording({ universe: label = 'default' } = {}) {
+        const u = this._getDmxUniverse(label);
+        if (!u) {
+            this._publishWarning({ severity: 'warn', code: 'DMX_UNIVERSE_NOT_FOUND',
+                message: `DMX universe "${label}" not found`, context: { universe: label } });
+            return;
+        }
+        u.startRecording();
+        logger.info(`Bridge: DMX recording started on universe '${label}'`);
+    }
+
+    _handleDmxStopRecording({ universe: label = 'default' } = {}) {
+        const u = this._getDmxUniverse(label);
+        if (!u) return;
+        const frames = u.stopRecording();
+        logger.info(`Bridge: DMX recording stopped on universe '${label}' — ${frames.length} frames captured`);
+    }
+
+    _handleDmxPlayRecording({ universe: label = 'default', loop = false } = {}) {
+        const u = this._getDmxUniverse(label);
+        if (!u) {
+            this._publishWarning({ severity: 'warn', code: 'DMX_UNIVERSE_NOT_FOUND',
+                message: `DMX universe "${label}" not found`, context: { universe: label } });
+            return;
+        }
+        u.playRecording(loop);
+        logger.info(`Bridge: DMX playback started on universe '${label}' (loop=${loop})`);
+    }
+
+    _handleDmxStopPlayback({ universe: label = 'default' } = {}) {
+        const u = this._getDmxUniverse(label);
+        if (!u) return;
+        u.stopPlayback();
+        logger.info(`Bridge: DMX playback stopped on universe '${label}'`);
     }
 }
 

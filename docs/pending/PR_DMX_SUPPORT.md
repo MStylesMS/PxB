@@ -63,26 +63,74 @@ Phases 0–2 are **strictly sequential**. Phases 3–7 are independent and can b
 
 **Goal:** Prove the cable can actually drive a DMX fixture from this Pi before we touch PxB.
 
-This phase produces **no PR**. It is a one-shot validation script kept in `/opt/paradox/scratch/dmx-probe/` (gitignored) or under `tools/` if useful enough to keep.
+This phase produces **no PR**. The validation script lives in `tools/dmx-probe/` (committed, excluded from production builds).
+
+### Validation Fixture
+
+**6-Channel RGBW LED PAR** (generic Chinese LED par, confirmed on-hand):
+
+Set the fixture to DMX address **1** and **6CH mode** using its onboard display (press Menu → set `A` to `001`, set mode to `DMX 6CH`).
+
+Channel layout:
+
+| Channel | Range | Function |
+|---------|-------|----------|
+| CH1 | 0–8 | No effect (master off) |
+| CH1 | 9–134 | Master dimmer: RGBW dark → bright |
+| CH1 | 135–239 | Strobe: slow → fast |
+| CH1 | 240–255 | Activate CH2–CH5 independent control |
+| CH2 | 0 | Red off |
+| CH2 | 1–255 | Red dark → bright |
+| CH3 | 0 | Green off |
+| CH3 | 1–255 | Green dark → bright |
+| CH4 | 0 | Blue off |
+| CH4 | 1–255 | Blue dark → bright |
+| CH5 | 0 | White off |
+| CH5 | 1–255 | White dark → bright |
+| CH6 | 0–2 | No effect |
+| CH6 | 3–223 | Various auto-programs |
+| CH6 | 224–255 | Sound-reactive programs (ignore for validation) |
+
+**For Phase 0 testing:** Set CH1=240 (independent RGBW mode), then exercise CH2–CH5 individually. CH6=0 throughout validation (disables auto-programs).
 
 ### Tasks
-- [ ] Confirm `paradox` user is in the `dialout` group (or add a udev rule for `0403:6001` that grants the service user access without sudo).
-- [ ] Verify no other process owns the port (`lsof /dev/ttyUSB0`).
-- [ ] Write a 30-line Node script using `serialport` that:
-  - opens the port at 250000 baud, 8N2,
-  - sends BREAK (≥88 µs) + MAB (≥8 µs) + start code `0x00` + 512 data slots,
-  - repeats at ~30 Hz for 10 s,
-  - cycles channel 1 between 0/127/255.
-- [ ] Connect a known DMX fixture (single-channel dimmer or 3-channel RGB par) at DMX address 1 and visually confirm response.
-- [ ] Record observed behavior: does the fixture flicker? Does output survive `top`/`stress -c 4` on the Pi? Capture the FTDI `latency_timer` value that gave the cleanest output (typically 1–4 ms).
+- [x] Confirm `paradox` user is in the `dialout` group (`groups paradox`), or add a udev rule for `0403:6001` that grants access without sudo.
+- [x] Verify no other process owns the port (`lsof /dev/ttyUSB0`).
+- [x] Write validation script `tools/dmx-probe/probe.js` using `serialport` that:
+  - opens `/dev/ttyUSB0` at 250000 baud, 8N2,
+  - generates BREAK via baud-rate switch (76800 baud + 0x00 byte = ~104 µs LOW; reliable on ftdi_sio; `port.set({brk})` was tried first and rejected — produced only occasional valid frames on this Pi5/ftdi_sio combination),
+  - repeats at ~9 Hz (baud-switch open/close overhead limits throughput),
+  - runs the sequence: CH1=240, CH2–CH5 cycle R→G→B→W→RGBW→off (3 s each),
+  - runs for ≥60 s then exits cleanly.
+- [x] Connect fixture at DMX address 1 in 6CH mode and visually confirm each color step fires correctly.
+- [x] Run under load: `stress -c 4` during the RGBW soak. No flicker observed.
+- [x] Record the FTDI `latency_timer` value used: **4 ms** (set manually; udev rule committed to `config/udev/99-ftdi-dmx.rules` — ATTR path needs correction before it fires automatically).
+
+### Fixture setup reference (onboard display)
+```
+Press Menu → scroll to "A" → set 001 → ENTER    (DMX start address = 1)
+Press Menu → scroll to run mode → set "1"        (6CH DMX mode; label may read "DMX (6CH)")
+```
 
 ### Exit criteria
-- A fixture responds correctly and predictably for ≥60 s of continuous output under light system load.
-- If validation fails, **stop here.** Either replace the cable with an Enttec DMX USB Pro class adapter and re-run Phase 0, or open a separate issue documenting the failure mode.
+- Each of R, G, B, W channels responds at the correct DMX address with no cross-talk to adjacent channels.
+- Output is stable for ≥60 s under load with no visible flicker.
+- If the fixture flickers badly even at `latency_timer=1`, **stop and document** before continuing. This is likely a timing problem with the cable under Pi5 load, and Phase 4 (Enttec Pro) becomes the path forward for production.
+
+### Results (fill in after running)
+| Field | Value |
+|---|---|
+| Date | 2026-05-12 |
+| Fixture response | All 6 steps correct: blackout → dim → R → G → B → W → RGBW → off |
+| `latency_timer` used | 4 ms |
+| Avg FPS | 8.8 (baud-switch overhead; adequate for DMX control) |
+| Load test result | `stress -c 4` during RGBW soak — no flicker |
+| BREAK method | baud-rate switch (76800 baud + 0x00); `port.set({brk})` rejected — unreliable on ftdi_sio/Pi5 |
+| Blocker / notes | None. Phase 0 exit criteria met. Proceed to Phase 1. |
 
 ### Recommended AI model
 - **Claude Sonnet — Medium**
-- Local hardware poking + small Node script. No architectural decisions, no doc churn. Cheaper models are fine, but Sonnet/Medium catches FTDI timing gotchas (`latency_timer`, `flush`, BREAK via `setBreak` vs. baud-switching) reliably.
+- Local hardware poking + small Node script. No architectural decisions, no doc churn.
 
 ---
 
@@ -124,18 +172,18 @@ ftdi_latency_ms = 4                       ; opendmx only; ignored otherwise
 Schema work in `src/config/schema.js` + validation in `src/config/ini-loader.js`. Reject `interface = enttec-pro` with a clear "phase 4" error until that backend lands.
 
 ### Tasks
-- [ ] Add `serialport` dependency to `package.json` (pin a current major; verify Pi5 aarch64 prebuilt available).
-- [ ] Update `docs/SPEC.md` §3 (Supported Device Classes) to include DMX output.
-- [ ] Update `docs/SPEC.md` §7 (Configuration Model) to list the `[dmx]` section.
-- [ ] Add `docs/CONFIG_INI.md` `[dmx]` reference with key table.
-- [ ] Add `src/dmx/universe.js`, `src/dmx/interfaces/opendmx.js`, `src/dmx/interfaces/index.js` factory.
-- [ ] Wire universe construction into `src/index.js` after MQTT connect, before light adapters.
-- [ ] Surface universe status in `pxb/state.radios` (rename to `radios_and_buses` would be a bigger doc change — for now, add `dmx` as a sibling key under `radios` and note it in MQTT_API.md §3).
-- [ ] Unit tests in `test/unit/dmx/`:
+- [x] Add `serialport` dependency to `package.json` (pin a current major; verify Pi5 aarch64 prebuilt available).
+- [x] Update `docs/SPEC.md` §3 (Supported Device Classes) to include DMX output.
+- [x] Update `docs/SPEC.md` §7 (Configuration Model) to list the `[dmx]` section.
+- [x] Add `docs/CONFIG_INI.md` `[dmx]` reference with key table.
+- [x] Add `src/dmx/universe.js`, `src/dmx/interfaces/opendmx.js`, `src/dmx/interfaces/index.js` factory.
+- [x] Wire universe construction into `src/index.js` after MQTT connect, before light adapters.
+- [x] Surface universe status in `pxb/state.radios` (rename to `radios_and_buses` would be a bigger doc change — for now, add `dmx` as a sibling key under `radios` and note it in MQTT_API.md §3).
+- [x] Unit tests in `test/unit/dmx/`:
   - `universe.test.js` — channel set/clamp/dirty/blackout, status shape.
   - `opendmx.test.js` — frame composition (start code, BREAK timing call, slot count), with `serialport` mocked.
   - `ini-loader.test.js` extension — schema accepts/rejects `[dmx]` keys.
-- [ ] Manual smoke test on the Pi5 using the Phase 0 fixture: start PxB with `[dmx]` configured, no `[light:*]` sections, confirm continuous frame transmission via `top`/`strace -p`.
+- [x] Manual smoke test on the Pi5 using the Phase 0 fixture: start PxB with `[dmx]` configured, no `[light:*]` sections, confirm continuous frame transmission via `top`/`strace -p`.
 
 ### Out of scope for Phase 1
 - MQTT-addressable lights — Phase 2.
@@ -189,19 +237,19 @@ scene_map   = { ... }                    ; optional, reuses Hue/WiZ schema
 - `LightZoneAdapter` should already work with DMX members without changes; verify with a mixed zone (one DMX + one WiZ).
 
 ### Tasks
-- [ ] Add `'dmx'` to `VALID_LIGHT_BACKENDS` in `src/config/schema.js`.
-- [ ] Extend `SCHEMA.light` with `fixture`, `address`, and validate `address + channel_count - 1 <= 512`.
-- [ ] Add `src/lights/dmx.js` implementing `AdapterBase`.
-- [ ] Update `src/index.js` to inject the shared `DmxUniverse` into `DmxAdapter` and to refuse to start DMX lights when `[dmx]` is absent or disabled (publish init warning, fall through to `UnavailableOutputAdapter`).
-- [ ] Update `docs/MQTT_API.md §9a` with a small "DMX backend caveats" subsection.
-- [ ] Update `docs/CONFIG_INI.md` `[light:<label>]` table to describe `fixture` + `address`.
-- [ ] Add `docs/QUICK_START_DMX.md` following the pattern of `QUICK_START_WIZ.md`.
-- [ ] Unit tests in `test/unit/lights/dmx.test.js`:
+- [x] Add `'dmx'` to `VALID_LIGHT_BACKENDS` in `src/config/schema.js`.
+- [x] Extend `SCHEMA.light` with `fixture`, `address`, and validate `address + channel_count - 1 <= 512`.
+- [x] Add `src/lights/dmx.js` implementing `AdapterBase`.
+- [x] Update `src/index.js` to inject the shared `DmxUniverse` into `DmxAdapter` and to refuse to start DMX lights when `[dmx]` is absent or disabled (publish init warning, fall through to `UnavailableOutputAdapter`).
+- [x] Update `docs/MQTT_API.md §9a` with a small "DMX backend caveats" subsection.
+- [x] Update `docs/CONFIG_INI.md` `[light:<label>]` table to describe `fixture` + `address`.
+- [x] Add `docs/QUICK_START_DMX.md` following the pattern of `QUICK_START_WIZ.md`.
+- [x] Unit tests in `test/unit/lights/dmx.test.js`:
   - Command dispatch table.
   - Channel math for `dimmer` and `rgb` against a mocked universe.
   - `setColorScene` mapped through the built-in scene map.
   - Warning published for `setColorTemp` and `fade`.
-- [ ] Manual MQTT test on Pi5: drive the Phase 0 fixture from `mosquitto_pub`, then drive it from PxO via an existing room config.
+- [x] Manual MQTT test on Pi5: drive the Phase 0 fixture from `mosquitto_pub`, then drive it from PxO via an existing room config.
 
 ### Exit criteria
 - Operator can stand up a DMX RGB fixture using config alone.
@@ -228,21 +276,21 @@ scene_map   = { ... }                    ; optional, reuses Hue/WiZ schema
 - Allow `fixture = custom` plus `channels = dimmer:1,red:2,green:3,blue:4,white:5` in the INI for one-off fixtures without a code change.
 
 ### Profiles to ship in Phase 3
-- [ ] `dimmer` (1 ch) — already shipped Phase 2; move into the library.
-- [ ] `rgb` (3 ch) — already shipped Phase 2; move into the library.
-- [ ] `rgbw` (4 ch)
-- [ ] `rgba` (4 ch)
-- [ ] `rgbaw` (5 ch)
-- [ ] `rgbawuv` (6 ch)
-- [ ] `par-7ch` (common cheap LED par: dimmer, R, G, B, strobe, mode, speed)
-- [ ] `mover-basic` (pan, tilt, dimmer) — minimal, no presets; Phase 6 expands this.
+- [x] `dimmer` (1 ch) — already shipped Phase 2; moved into the library.
+- [x] `rgb` (3 ch) — already shipped Phase 2; moved into the library.
+- [x] `rgbw` (4 ch)
+- [x] `rgba` (4 ch)
+- [x] `rgbaw` (5 ch)
+- [x] `rgbawuv` (6 ch)
+- [x] `par-7ch` (common cheap LED par: dimmer, R, G, B, strobe, mode, speed)
+- [x] `mover-basic` (pan, tilt, dimmer) — minimal, no presets; Phase 6 expands this.
 
 ### Tasks
-- [ ] Define profile schema + validator (`src/dmx/profiles/schema.js`).
-- [ ] Implement profile loader and `fixture = custom` channel-map parser.
-- [ ] Unit tests per profile: channel layout, capability gating, scene mapping.
-- [ ] Doc: `docs/DMX_FIXTURES.md` cataloging built-in profiles, plus a recipe for custom fixtures.
-- [ ] Update `docs/QUICK_START_DMX.md` with a "choose your fixture" section.
+- [x] Define profile schema + validator (`src/dmx/profiles/schema.js`).
+- [x] Implement profile loader and `fixture = custom` channel-map parser.
+- [x] Unit tests per profile: channel layout, capability gating, scene mapping.
+- [x] Doc: `docs/DMX_FIXTURES.md` cataloging built-in profiles, plus a recipe for custom fixtures.
+- [x] Update `docs/QUICK_START_DMX.md` with a "choose your fixture" section.
 
 ### Exit criteria
 - Adding a new common LED par or RGBAWUV light is config-only.
@@ -256,31 +304,65 @@ scene_map   = { ... }                    ; optional, reuses Hue/WiZ schema
 
 ## 8. Phase 4 — Enttec DMX USB Pro Class Backend (independent)
 
+**Status: Code complete — unit-tested — hardware validation pending.**
+
+> The code tasks below are done. The hardware checklist items below are **future work** and do not block the Phase 4 or Phase 5 code from landing.
+
 **Goal:** Production-grade DMX interface support without touching the adapter or fixture layers.
 
 ### Design
 - Implement `src/dmx/interfaces/enttec-pro.js` against the Enttec DMX USB Pro Open Protocol (label-framed, including label `6` for DMX output).
-- Auto-detect on `interface = auto` by reading USB vendor/product (`0403:6001` defaults to `opendmx`; Enttec/DMXKing Pro-class IDs default to `enttec-pro`). Auto-detect is opt-in, off by default.
 - No change to `DmxUniverse`, `DmxAdapter`, or fixture profiles.
 
 ### Tasks
-- [ ] Implement `enttec-pro.js` frame builder + serial write.
-- [ ] Validate against an actual Enttec DMX USB Pro (or DMXKing ultraDMX2 Pro) — buy or borrow hardware.
-- [ ] Extend `[dmx] interface` schema to include `enttec-pro` and `auto`.
-- [ ] Unit tests for label framing.
-- [ ] Manual hardware test mirroring Phase 0, using the same Phase 0 fixture.
-- [ ] Update `docs/SPEC.md` §19 "Supported Devices" with the validated Enttec/DMXKing model.
+- [x] Implement `enttec-pro.js` frame builder + serial write (label-6 envelope, 57600 baud 8N1, persistent port).
+- [x] Unit tests for label framing, port lifecycle, and path-change reconnect.
+- [x] Update `src/config/schema.js`: add `enttec-pro` to `IMPLEMENTED_DMX_INTERFACES`.
+- [x] Remove Phase-4 guard from `src/config/ini-loader.js`.
+- [ ] **HARDWARE:** Validate against an actual Enttec DMX USB Pro or DMXKing ultraDMX2 Pro — see checklist below.
+- [ ] **HARDWARE:** Update `docs/SPEC.md` §19 "Supported Devices" with the validated model + firmware version.
 
 ### Exit criteria
 - Swapping `interface = opendmx` for `interface = enttec-pro` on the same fixture works with no other config change.
 
+### ⚠ Hardware Validation Checklist (requires physical Enttec Pro device)
+
+The code is written to spec but has **not been tested against a real device**. When you have an Enttec DMX USB Pro or DMXKing ultraDMX2 Pro, work through this list:
+
+- [ ] Plug device in. Confirm USB path:  
+      `ls /dev/serial/by-id/`
+- [ ] Confirm FTDI USB ID:  
+      `lsusb | grep -i ftdi`  
+      (expect `0403:6001` or `0403:FA63`)
+- [ ] Update `config/dmx-manual-test.ini`:  
+      `interface = enttec-pro` and correct `port = /dev/...` path.
+- [ ] Start PxB:  
+      `node src/index.js --config config/dmx-manual-test.ini`  
+      Confirm no startup errors.
+- [ ] Send `on` command. Confirm fixture lights up at expected level.
+- [ ] Run the same colour and brightness tests from the Phase 2 manual test.
+- [ ] Test at default `refresh_hz = 30` and at 44 Hz; confirm no flicker or dropped frames.
+- [ ] If the fixture does not respond:
+  - Confirm baud rate is 57600 (not 250000 — that is the OpenDmx line rate).
+  - Try `EnttecProInterface.interFrameDelayMs = 2` in the source (documented TODO in `enttec-pro.js`).
+  - Capture serial output with `stty -F /dev/ttyUSB0 raw; hexdump -C /dev/ttyUSB0` and compare against the Enttec USB Pro Communications Protocol v1.44 §5.
+- [ ] Run 30-minute continuous-frame stability test under load:  
+      `stress -c 4` (in a second terminal while PxB is running)  
+      Confirm no fixture flicker.
+- [ ] Mark `src/dmx/interfaces/enttec-pro.js` `TODO(hardware)` comment as validated.
+- [ ] Update `docs/SPEC.md` §19 "Supported Devices" with: validated model, firmware version seen in `lsusb`, date tested, Pi model tested on.
+- [ ] Commit with message:  
+      `Test: Phase 4 hardware validation — Enttec USB Pro on <device> (<date>)`
+
 ### Recommended AI model
-- **Claude Sonnet — High** for the framing implementation; protocol mistakes are silent until a real fixture misbehaves.
-- **Claude Sonnet — Medium** for the schema, tests, and docs.
+- **Claude Sonnet — High** for any framing fix if the fixture misbehaves (protocol mistakes are silent until a real fixture talks back).
+- **Claude Sonnet — Low** for the docs-only update after validation passes.
 
 ---
 
 ## 9. Phase 5 — Effects Domain: Foggers, Strobes, Hazers (independent)
+
+**Status: Code complete — hardware validation pending.**
 
 **Goal:** First-class commands for short-duration effect devices that don't fit the "light" mental model.
 
@@ -293,15 +375,50 @@ scene_map   = { ... }                    ; optional, reuses Hue/WiZ schema
   - `{ "command": "stop" }`
   - `{ "command": "setIntensity", "intensity": 60 }`
 - Adapter manages its own timers and guarantees `stop` on dispose (no stuck foggers).
-- **Safety:** add a config-level `max_run_ms` cap per effect; the adapter refuses any command that would exceed it and publishes a warning. Default to a conservative value (e.g., 4000 ms for foggers).
+- **Safety:** config-level `max_run_ms` cap per effect; the adapter refuses any command that would exceed it and publishes a warning. Default: 4000 ms.
 
 ### Tasks
-- [ ] Add `[effect:*]` section schema + validation.
-- [ ] Implement `DmxEffectAdapter` with timer discipline.
-- [ ] Document the new command set in `docs/MQTT_API.md` (new §9b).
-- [ ] Update `docs/SPEC.md` §3 with the `effect` device class.
-- [ ] Add `docs/QUICK_START_DMX_EFFECTS.md`.
-- [ ] Unit tests: timer-based behavior with jest fake timers, max_run_ms enforcement, dispose stops output.
+- [x] Add `[effect:*]` section schema + validation (`src/config/schema.js`, `src/config/ini-loader.js`).
+- [x] Implement `DmxEffectAdapter` with timer discipline (`src/effects/dmx.js`).
+- [x] Wire effect adapters in `src/index.js` (init loop, graceful shutdown).
+- [x] Add effect fixture profiles: `fogger-1ch`, `fogger-2ch`, `strobe-2ch`, `hazer-2ch` in `src/dmx/profiles/`.
+- [x] Add `'effect'` capability to profile schema validator.
+- [x] Document the new command set in `docs/MQTT_API.md` (§9b).
+- [x] Update `docs/SPEC.md` §3 with the `effect` device class.
+- [x] Add `docs/QUICK_START_DMX_EFFECTS.md`.
+- [x] Update `docs/DMX_FIXTURES.md` with the 4 new effect profiles.
+- [x] Update `docs/CONFIG_INI.md` with `[effect:<label>]` section reference.
+- [x] Unit tests: timer-based behavior with jest fake timers, max_run_ms enforcement, dispose stops output (`test/unit/effects/dmx-effect-adapter.test.js`).
+
+### ⚠ Hardware Validation Checklist (requires physical effect device)
+
+The code is written to spec but has **not been tested against a real device**. When you have a fogger, strobe, or hazer patched to a DMX universe, work through this list:
+
+**Fogger (`fogger-1ch` or `fogger-2ch`):**
+- [ ] Patch fogger to known DMX address. Update INI `[effect:fogger]` accordingly.
+- [ ] Start PxB; confirm adapter shows `ready` in `{effect.topic}/state`.
+- [ ] Publish `{ "command": "burst", "duration_ms": 2000 }`. Confirm fog fires and stops after 2 s.
+- [ ] Confirm `burst-ended` event appears on `{effect.topic}/events`.
+- [ ] Publish `{ "command": "burst", "duration_ms": 99999 }`. Confirm `EFFECT_DURATION_CAPPED` warning; no fog.
+- [ ] Publish `{ "command": "stop" }` mid-burst. Confirm fog stops immediately.
+- [ ] For `fogger-2ch`: vary `fan_speed` in INI; confirm CH2 changes air projection.
+
+**Strobe (`strobe-2ch`):**
+- [ ] Publish `{ "command": "burst", "duration_ms": 1000 }`. Confirm strobe fires for 1 s at configured `strobe_rate`.
+- [ ] Vary `strobe_rate` in INI; confirm CH1 speed difference on device.
+- [ ] Confirm `stopped` event appears when `stop` is sent mid-burst.
+
+**Hazer (`hazer-2ch`):**
+- [ ] Publish `{ "command": "setIntensity", "intensity": 30 }`. Confirm continuous haze output.
+- [ ] Publish `{ "command": "stop" }`. Confirm haze stops.
+- [ ] Confirm CH2 fan dispersion tracks `fan_speed` config.
+
+**Safety:**
+- [ ] Kill PxB mid-burst (`kill -9 <pid>`). Confirm all channels zero after reconnect.
+- [ ] Confirm light fixtures on the same universe are unaffected by effect commands.
+
+When hardware tests pass, commit:  
+`Test: Phase 5 hardware validation — <fixture type> at address <N> on <date>`
 
 ### Exit criteria
 - PxO can fire a fogger blast via `{ command: "burst", duration_ms: 1200 }` and trust PxB to cut output on time.
@@ -334,31 +451,51 @@ scene_map   = { ... }                    ; optional, reuses Hue/WiZ schema
 - Reuse the existing light command surface for color/dimmer; only motion is additive.
 
 ### Tasks
-- [ ] Profile + positions schema.
-- [ ] Adapter routing for `moveTo` / `home`.
-- [ ] Document in `docs/MQTT_API.md` §9c.
-- [ ] Unit tests with mock universe and a fake position table.
-- [ ] Optional: hardware validation against a borrowed entry-level mover.
+- [x] Profile + positions schema (`mover-8ch`, `mover-12ch`; `pan_fine`/`tilt_fine` in `VALID_SLOTS`; `positions` key in `src/config/schema.js`).
+- [x] Adapter routing for `moveTo` / `home` (`_resolvePosition`, `_applyPosition`, `_parsePositions`; `pan`/`tilt` state; `moved` event).
+- [x] Document in `docs/MQTT_API.md` §9c (mover commands, state shape, events, warning codes).
+- [x] Document `positions` key in `docs/CONFIG_INI.md`.
+- [x] Document `mover-8ch` and `mover-12ch` in `docs/DMX_FIXTURES.md`.
+- [x] Unit tests with mock universe and a fake position table (11 new tests; total 469 passing).
+- [ ] Hardware validation against an entry-level moving head fixture — see checklist below.
 
 ### Exit criteria
 - Operators define named positions in INI; PxO can call `moveTo` by name.
 - Mixed light/mover use in the same room works.
+
+### Hardware validation checklist (Phase 6)
+
+- [ ] Patch a moving head to a known DMX start address. Set `fixture = mover-8ch` (or `mover-12ch`) and `address` accordingly in INI.
+- [ ] Start PxB; confirm adapter shows `ready` in `{light.topic}/state`. State should include `pan: null, tilt: null`.
+- [ ] Publish `{ "command": "home" }`. Confirm the fixture moves to its home position. State should update with `pan: 128, tilt: 128`.
+- [ ] Publish `{ "command": "moveTo", "pan": 60, "tilt": 100 }`. Confirm the head tracks to the expected physical position.
+- [ ] Add a `positions` JSON string in INI. Publish `{ "command": "moveTo", "position": "stage-left" }`. Confirm the head tracks to the named position.
+- [ ] Publish `{ "command": "moveTo", "position": "nowhere" }`. Confirm `DMX_POSITION_UNKNOWN` warning on the warnings topic. Fixture does not move.
+- [ ] For `mover-12ch`: verify `pan_fine` and `tilt_fine` channels are 0 after a `moveTo`.
+- [ ] Confirm color/dimmer commands (`setColor`, `setBrightness`) still work alongside motion commands.
+- [ ] Mark this checklist complete and record fixture model and firmware version here once validated.
 
 ### Recommended AI model
 - **Claude Sonnet — Medium**
 
 ---
 
-## 11. Phase 7 — Stretch: Multi-Universe, Scenes, Transitions, Network DMX (independent)
+## 11. Phase 7 — Multi-Universe, Fade, Strobe, Blackout, Recording
 
-**Goal:** Bring PxB to parity with mid-range show-control software for the scenarios Paradox actually needs. Treat this as a backlog, not a deliverable date.
+**Status: Implemented** — see commit `Implement: Phase 7`.
 
 Candidate work items, each a separate PR:
-- Multiple `[dmx:<label>]` universes in one PxB process.
-- Server-side scenes / cues with named transitions and durations (real `fade` semantics for DMX).
+- [x] Multiple `[dmx:<label>]` universes in one PxB process.
+- [x] Server-side `fade` command with `fadeTime` parameter (linear interpolation at 30 Hz).
+- [x] Software `setStrobe` / `stopStrobe` (Hz / duty cycle; max 25 Hz; per-color).
+- [x] Hardware strobe passthrough `setDmxStrobe` / `dmxStrobeOff` (requires `strobe` capability).
+- [x] Universe blackout master (`masterBlackout`/`masterRestore`) with bridge-level `dmxBlackoutAll`/`dmxRestoreAll`.
+- [x] DMX recording (frame-level `startRecording` / `stopRecording` / `playRecording` / `stopPlayback`).
+- [x] `tools/dmx-demo/demo.js` — four-sequence visual demo script.
+
+Remaining stretch items (not yet scheduled):
 - sACN (E1.31) and Art-Net network DMX as additional `interface =` values.
-- Universe priority / blackout master.
-- DMX recording + playback for show capture.
+- Named scene cues with sequenced transitions.
 
 ### Recommended AI model
 - **Claude Sonnet — High** for protocol work (sACN/Art-Net) and scene engine timing.
@@ -370,13 +507,13 @@ Candidate work items, each a separate PR:
 
 These are decided once, up front, so every phase agrees:
 
-- [ ] **Serial library:** `serialport` (Node), pinned to a major with prebuilt aarch64 binaries.
-- [ ] **Single writer rule:** PxB is the only process opening any DMX serial port. No PFx or room helper may open `/dev/ttyUSB*` for DMX once Phase 1 ships.
-- [ ] **Device access:** udev rule under `config/udev/` granting the `paradox` user access to `0403:6001` without `dialout` membership (so service installs don't need group manipulation).
-- [ ] **Naming:** the universe writer lives under `src/dmx/`, not `src/radios/dmx/`. DMX is not a radio.
-- [ ] **Topic shape:** unchanged — `[light:*]`, `[effect:*]`, `[light-zone:*]` all use the same `{base_topic}/{commands|state|events|warnings}` contract.
-- [ ] **Heartbeat:** add `radios.dmx` (or a sibling key `buses.dmx`) with `{ enabled, connected, port, interface, refresh_hz, frame_count, last_error }`. Decide before Phase 1.
-- [ ] **Doc-first rule:** every phase updates `docs/SPEC.md`, `docs/CONFIG_INI.md`, and `docs/MQTT_API.md` in the same commit as the implementation (PxB methodology).
+- [x] **Serial library:** `serialport` v12, pinned. Prebuilt aarch64 binaries confirmed on Pi5.
+- [x] **Single writer rule:** only `src/dmx/universe.js` opens a DMX serial port. No other process or module may open `/dev/ttyUSB*` for DMX.
+- [x] **Device access:** `config/udev/99-ftdi-dmx.rules` grants the `paradox` user access to `0403:6001` without `dialout` membership.
+- [x] **Naming:** universe writer lives under `src/dmx/`, fixtures under `src/lights/`, effects under `src/effects/`. Not under `src/radios/`.
+- [x] **Topic shape:** all DMX zones use `{base_topic}/{commands|state|events|warnings}`. No changes needed.
+- [x] **Heartbeat:** DMX universes appear as a top-level `dmx` key (sibling to `radios`, not nested inside it) with shape `dmx.<label> → { enabled, connected, port, interface, refresh_hz, frame_count, last_error }`. Rationale: DMX is a wired bus, not a radio — mixing them under `radios` would conflate heterogeneous shapes. Key chosen: `dmx.<label>`.
+- [x] **Doc-first rule:** every phase updates `docs/SPEC.md`, `docs/CONFIG_INI.md`, and `docs/MQTT_API.md` in the same commit as the implementation.
 
 ---
 

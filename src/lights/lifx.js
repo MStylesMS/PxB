@@ -81,20 +81,15 @@ class LifxAdapter extends AdapterBase {
         }
 
         const commandTopic = `${this.config.topic}/commands`;
-        this.mqttClient.subscribe(commandTopic, (msg) => {
-            this._handleCommand(msg).catch((err) => {
-                this.logger.error(`LifxAdapter: Command handler error: ${err.message}`);
-            });
-        });
+        this.mqttClient.subscribe(commandTopic, (_topic, payload) =>
+            this.safeCall('command', () => this._handleCommand(payload)));
         this._subscribed = true;
 
         this._publishState();
 
-        this.updateTimer = setInterval(() => {
-            this._pollState().catch((err) => {
-                this.logger.warn(`LifxAdapter: Poll error: ${err.message}`);
-            });
-        }, 5000);
+        // eslint-disable-next-line no-restricted-syntax -- safeCall wraps this callback
+        this.updateTimer = setInterval(() =>
+            this.safeCall('poll', () => this._pollState()), 5000);
 
         this.logger.info('LifxAdapter: Initialized');
     }
@@ -329,9 +324,9 @@ class LifxAdapter extends AdapterBase {
         this.publishState({ type: 'lifx', timestamp: new Date().toISOString(), lights });
     }
 
-    async _handleCommand(msg) {
+    async _handleCommand(payload) {
         try {
-            await this.executeCommand(JSON.parse(msg));
+            await this.executeCommand(typeof payload === 'string' ? JSON.parse(payload) : payload);
         } catch (err) {
             this.logger.error(`LifxAdapter: Failed to parse command: ${err.message}`);
         }

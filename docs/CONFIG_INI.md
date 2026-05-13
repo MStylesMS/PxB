@@ -12,7 +12,13 @@ PxB is configured by a single INI file. Pass the path via `--config` or default 
 | `[global]` | Process-wide defaults | 0–1 |
 | `[zwave]` | Z-Wave radio endpoint | 0–1 |
 | `[zigbee]` | Zigbee radio endpoint | 0–1 |
+| `[dmx]` | DMX512 universe output (singleton, label "default") | 0–1 |
+| `[dmx:<label>]` | Named DMX512 universe (multi-universe) | 0–N |
 | `[node:<label>]` | One configured device | 0–N |
+| `[light:<label>]` | One light fixture / Hue bridge / WiZ / LIFX device | 0–N |
+| `[light-zone:<label>]` | Fan-out group across multiple lights | 0–N |
+| `[switch:<label>]` | One Shelly relay | 0–N |
+| `[effect:<label>]` | One DMX effect device (fogger / strobe / hazer) | 0–N |
 
 ## `[mqtt]`
 
@@ -74,6 +80,102 @@ When `db_path` is set (or defaulted), PxB also writes two companion files in the
 - Coordinator network backup: `zigbee-network.db`
 
 File permissions should be `0600` when `network_key` is set.
+
+## `[dmx]` / `[dmx:<label>]`
+
+Configures one or more DMX512 output universes.
+
+- **`[dmx]`** — singleton universe (label `"default"`). Compatible with all existing configs. Only one `[dmx]` section per file.
+- **`[dmx:<label>]`** — named universe. Multiple named sections are supported. `<label>` must match `[a-z0-9][a-z0-9-]*`. You cannot mix `[dmx]` and `[dmx:default]` in the same file.
+
+When multiple universes are configured, `[light:*]` and `[effect:*]` sections may declare which universe to use via the `universe` key (default: `"default"`).
+
+| Key | Type | Required | Default | Description |
+|-----|------|:--------:|---------|-------------|
+| `enabled` | bool | no | `true` | Disable without removing section |
+| `interface` | string | yes | — | `opendmx` (direct FTDI) or `enttec-pro` (Enttec USB Pro / DMXKing ultraDMX2) |
+| `port` | path | yes | — | Serial device path. Prefer stable `/dev/serial/by-id/usb-FTDI_FT232R...` form |
+| `refresh_hz` | int | no | `30` | Frame repeat rate (1–44 Hz). Actual Hz may be lower due to baud-switch overhead |
+| `universe_size` | int | no | `512` | Slot count sent per frame (24–512) |
+| `ftdi_latency_ms` | int | no | `4` | FTDI latency timer in ms (opendmx only). Set to 4 or lower; the udev rule in `config/udev/99-ftdi-dmx.rules` applies this on plug-in |
+
+**opendmx:** uses the baud-rate-switch BREAK method (open at 76800 baud, send `0x00`, reopen at 250000 baud). The `port.set({brk})` method is unreliable on ftdi_sio + Pi5 and must **not** be used.
+
+**enttec-pro / DMXKing ultraDMX2 Pro:** uses the Enttec Open Protocol label-6 envelope at 57600 baud 8N1. Hardware validation checklist: `docs/pending/PR_DMX_SUPPORT.md §8`.
+
+**Single-universe example (existing style):**
+
+```ini
+[dmx]
+enabled     = true
+interface   = opendmx
+port        = /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_B002JE1K-if00-port0
+refresh_hz  = 30
+```
+
+**Multi-universe example:**
+
+```ini
+[dmx:stage]
+interface   = opendmx
+port        = /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_stage
+refresh_hz  = 30
+
+[dmx:foyer]
+interface   = enttec-pro
+port        = /dev/serial/by-id/usb-ENTTEC_DMX_USB_PRO_foyer
+refresh_hz  = 25
+
+[light:par1]
+backend     = dmx
+topic       = paradox/houdini/lights/par1
+fixture     = par-7ch
+address     = 1
+universe    = stage            # ← which [dmx:<label>] universe to use (default: "default")
+```
+
+## `[effect:<label>]`
+
+Declares one DMX effect output device (fogger, strobe, or hazer). Requires a `[dmx]` section. Uses `DmxEffectAdapter` with a timer-safe command surface separate from the light adapters.
+
+`<label>` must match `[a-z0-9][a-z0-9-]*`.
+
+| Key | Type | Required | Default | Description |
+|-----|------|:--------:|---------|-------------|
+| `backend` | string | yes | — | Must be `dmx` |
+| `topic` | string | yes | — | MQTT topic root for this device |
+| `fixture` | string | yes | — | `fogger-1ch`, `fogger-2ch`, `strobe-2ch`, or `hazer-2ch` |
+| `address` | int | no | `1` | DMX start address, 1-based (1–512) |
+| `max_run_ms` | int | no | `4000` | Safety ceiling: any burst/pulse with `duration_ms` above this value is rejected with a warning |
+| `intensity` | int | no | `100` | Default output intensity for burst commands that omit the `intensity` param (0–100) |
+| `strobe_rate` | int | no | `128` | Strobe channel value for `strobe-2ch` (0–255; 0 = off, 255 = fastest) |
+| `fan_speed` | int | no | `0` | Speed channel value for `fogger-2ch` and `hazer-2ch` (0–255) |
+
+Example:
+
+```ini
+[dmx]
+enabled    = true
+interface  = enttec-pro
+port       = /dev/serial/by-id/usb-ENTTEC_DMX_USB_PRO_EN123456-if00-port0
+
+[effect:fogger]
+backend    = dmx
+topic      = paradox/houdini/effects/fogger
+fixture    = fogger-2ch
+address    = 1
+max_run_ms = 3000
+intensity  = 90
+fan_speed  = 120
+
+[effect:strobe]
+backend     = dmx
+topic       = paradox/houdini/effects/strobe
+fixture     = strobe-2ch
+address     = 3
+max_run_ms  = 2000
+strobe_rate = 180
+```
 
 ## `[node:<label>]`
 
@@ -158,6 +260,21 @@ Light device sections are used for direct network/cloud light backends (`hue`, `
 | `hue_target_id` | string | with `group`/`light` | — | Hue group id or light id for scoped targeting |
 | `scene_map` | string(JSON) | no | built-in defaults | Per-backend scene overrides keyed by scene name |
 | `timeout_s` | int | no | `10` | Request timeout |
+| `fixture` | string | dmx only | — | Fixture profile: `dimmer` or `rgb` (Phase 2); more in Phase 3 |
+| `address` | int | dmx only | `1` | DMX start address for this fixture (1–512) |
+| `positions` | string(JSON) | dmx mover only | `{"home":{"pan":128,"tilt":128}}` | Named pan/tilt positions for `moveTo` command |
+| `universe` | string | dmx only | `"default"` | Which `[dmx:<label>]` universe this fixture belongs to |
+
+`positions` is a JSON object mapping position names to `{ pan, tilt, speed? }` objects. The `home` position is always available (default `pan: 128, tilt: 128`) and can be overridden. Example:
+
+```ini
+[light:stage-mover]
+backend = dmx
+topic = paradox/houdini/lights/mover
+fixture = mover-8ch
+address = 1
+positions = {"home":{"pan":128,"tilt":128},"stage-left":{"pan":60,"tilt":100},"stage-right":{"pan":190,"tilt":100},"center":{"pan":128,"tilt":90}}
+```
 
 `scene_map` lets operators tune scene color matching between vendors without code changes. Example:
 
@@ -175,6 +292,24 @@ scene_map = {"cyan":{"on":true,"r":0,"g":210,"b":255,"brightness":72}}
 `hue_target_type = all` targets the bridge-wide all-lights action. Use
 `group` or `light` with `hue_target_id` to scope the adapter to a Hue room/zone
 group or a single Hue light.
+
+For `backend = dmx` fixtures, pair the `[light:*]` section with a `[dmx]` universe section:
+
+```ini
+[dmx]
+interface = opendmx
+port = /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_B002JE1K-if00-port0
+refresh_hz = 30
+
+[light:stage-rgb]
+backend = dmx
+topic = paradox/houdini/lights/stage-rgb
+fixture = rgb
+address = 1
+brightness = 100
+```
+
+Supported commands and caveats are listed in `docs/MQTT_API.md §9a`.
 
 ## `[light-zone:<label>]`
 
