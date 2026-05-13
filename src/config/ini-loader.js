@@ -300,7 +300,10 @@ function loadConfig(configPath) {
 
         if (light.backend === 'dmx') {
             if (!light.fixture) {
-                errors.push(`[${sectionKey}] backend=dmx requires "fixture" (e.g. fixture = dimmer or fixture = rgb)`);
+                errors.push(`[${sectionKey}] backend=dmx requires "fixture" (e.g. fixture = rgb or fixture = par-7ch)`);
+            }
+            if (light.fixture === 'custom' && !light.channels) {
+                errors.push(`[${sectionKey}] fixture=custom requires a "channels" key (e.g. channels = dimmer:1,red:2,green:3,blue:4)`);
             }
             const addr = light.address || 1;
             if (addr < 1 || addr > 512) {

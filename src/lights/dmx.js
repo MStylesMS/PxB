@@ -1,25 +1,7 @@
 'use strict';
 
 const AdapterBase = require('../adapter-base');
-
-// ── Built-in fixture profiles ──────────────────────────────────────────────
-// Each profile defines:
-//   channels: ordered array of slot names, index = offset from DMX address (0-based)
-//   capabilities: what command surface is available
-
-const PROFILES = {
-    dimmer: {
-        channels:     ['dimmer'],
-        capabilities: new Set(['dimmer']),
-    },
-    rgb: {
-        channels:     ['red', 'green', 'blue'],
-        capabilities: new Set(['dimmer', 'color']),
-    },
-};
-
-// Phase 3 will move these into src/dmx/profiles/ and load them dynamically.
-// The adapter accepts profile names that match PROFILES keys only.
+const { loadProfile } = require('../dmx/profiles');
 
 // ── Default color scenes (shared across RGB-capable fixtures) ──────────────
 const DEFAULT_SCENE_MAP = {
@@ -63,12 +45,12 @@ function parseColor(colorVal) {
 /**
  * DmxAdapter — Controls a single DMX512 fixture through a shared DmxUniverse.
  *
- * Phase 2 built-in profiles: `dimmer` (1 ch), `rgb` (3 ch).
- *
  * Config keys:
- *   topic     — MQTT topic for this fixture
- *   fixture   — built-in profile name: 'dimmer' | 'rgb'
- *   address   — DMX start address, 1-based (default 1)
+ *   topic      — MQTT topic for this fixture
+ *   fixture    — profile name: dimmer | rgb | rgbw | rgba | rgbaw | rgbawuv |
+ *                par-7ch | mover-basic | custom
+ *   channels   — required when fixture = custom; e.g. "dimmer:1,red:2,green:3,blue:4"
+ *   address    — DMX start address, 1-based (default 1)
  *   brightness — default brightness 0–100 (default 100)
  *   scene_map — optional INI-encoded JSON overrides for colour scenes
  *
@@ -76,13 +58,6 @@ function parseColor(colorVal) {
  * never silently dropped. Documented in docs/MQTT_API.md §9a.
  */
 class DmxAdapter extends AdapterBase {
-    /**
-     * @param {object}       opts
-     * @param {object}       opts.config      — parsed INI section
-     * @param {import('../mqtt/client').MqttClient} opts.mqttClient
-     * @param {object}       opts.logger
-     * @param {import('../dmx/universe').DmxUniverse} opts.universe — shared universe instance
-     */
     constructor({ config, mqttClient, logger, universe }) {
         super({ name: 'DmxAdapter', config, mqttClient, logger });
 
@@ -90,19 +65,15 @@ class DmxAdapter extends AdapterBase {
             throw new Error('DmxAdapter: universe is required (no [dmx] section configured or dmx disabled)');
         }
 
-        const profileName = (config.fixture || '').toLowerCase();
-        const profile = PROFILES[profileName];
-        if (!profile) {
-            throw new Error(
-                `DmxAdapter: unknown fixture "${config.fixture}" — supported in Phase 2: ${Object.keys(PROFILES).join(', ')}`
-            );
-        }
+        // Load profile from library (throws descriptively on unknown name or bad custom spec)
+        const fixtureName = (config.fixture || '').toLowerCase();
+        const profile = loadProfile(fixtureName, { channels: config.channels });
 
         this._universe    = universe;
         this._profile     = profile;
-        this._profileName = profileName;
+        this._profileName = fixtureName;
         this._address     = clamp(config.address || 1, 1, 512);
-        this._defaultBrightness = clamp(config.brightness || 100, 0, 100);
+        this._defaultBrightness = clamp(config.brightness ?? 100, 0, 100);
 
         // Verify the fixture fits within the universe
         const lastSlot = this._address + profile.channels.length - 1;
@@ -113,9 +84,17 @@ class DmxAdapter extends AdapterBase {
             );
         }
 
+        // Build slot → absolute DMX address lookup
+        this._slotOffset = {};
+        for (let i = 0; i < profile.channels.length; i++) {
+            this._slotOffset[profile.channels[i]] = this._address + i;
+        }
+
+        // Capability set for fast membership tests
+        this._caps = new Set(profile.capabilities);
+
         this._sceneMap = { ...DEFAULT_SCENE_MAP, ...this._parseSceneMap(config.scene_map) };
 
-        // Working state — reflects what was last pushed to the universe
         this._state = {
             on:         false,
             brightness: 0,
@@ -193,7 +172,7 @@ class DmxAdapter extends AdapterBase {
             switch (action) {
                 case 'on':
                 case 'allOn':
-                    this._applyOn(this._defaultBrightness);
+                    this._applyOn(payload.brightness ?? this._defaultBrightness);
                     this.publishEvent('all-on');
                     break;
 
@@ -221,16 +200,13 @@ class DmxAdapter extends AdapterBase {
 
                 case 'getStatus':
                 case 'getState':
-                    // State is always retained; re-publish to refresh timestamp.
                     this._publishState();
                     break;
 
-                // Unsupported commands — acknowledged with structured warnings, never silently dropped.
                 case 'fade':
                     this.publishWarning(
                         'DMX_CMD_UNSUPPORTED',
-                        `"fade" is not supported for DMX fixtures in Phase 2. ` +
-                        `Use setBrightness for immediate level changes.`,
+                        '"fade" is not supported for DMX fixtures. Use setBrightness for immediate level changes.',
                         { command: action }
                     );
                     break;
@@ -238,8 +214,9 @@ class DmxAdapter extends AdapterBase {
                 case 'setColorTemp':
                     this.publishWarning(
                         'DMX_CMD_UNSUPPORTED',
-                        `"setColorTemp" is not supported for DMX RGB fixtures. ` +
-                        `Use setColor with an explicit RGB value or a named scene (e.g. warmWhite).`,
+                        '"setColorTemp" is not supported for DMX fixtures. ' +
+                        'Use setColor with explicit RGB values, a named scene (e.g. warmWhite), ' +
+                        'or a RGBW/RGBAW scene_map entry for white-channel fixtures.',
                         { command: action }
                     );
                     break;
@@ -255,50 +232,55 @@ class DmxAdapter extends AdapterBase {
         this._publishState();
     }
 
-    // ── Private helpers ──────────────────────────────────────────────────────
+    // ── Channel helpers ──────────────────────────────────────────────────────
+
+    /** True if the profile has at least a red, green, or blue channel slot. */
+    _hasColorChannels() {
+        return 'red' in this._slotOffset || 'green' in this._slotOffset || 'blue' in this._slotOffset;
+    }
+
+    /** Apply profile.defaults to the universe (pinned mode/speed/strobe channels). */
+    _applyDefaults() {
+        const defs = this._profile.defaults;
+        if (!defs) return;
+        for (const [slot, val] of Object.entries(defs)) {
+            if (slot in this._slotOffset) {
+                this._universe.setChannel(this._slotOffset[slot], val);
+            }
+        }
+    }
 
     /**
-     * Write a brightness level (0–100) to the fixture. For `dimmer` profiles
-     * this sets the single intensity channel. For `rgb` profiles this scales
-     * the current RGB values (or sets full white at the given brightness if no
-     * colour has been set yet).
+     * Apply brightness (0–100) to the fixture.
+     * - Profiles with a `dimmer` slot: set that channel to 0–255.
+     * - Profiles without `dimmer` (rgb, rgbw, …): scale current color channels.
      */
     _applyBrightness(pct) {
         const b = clamp(pct ?? this._defaultBrightness, 0, 100);
-        if (this._profileName === 'dimmer') {
-            const dimVal = Math.round(b * 2.55); // 0–100 → 0–255
-            this._universe.setChannel(this._address, dimVal);
+
+        if ('dimmer' in this._slotOffset) {
+            this._universe.setChannel(this._slotOffset['dimmer'], Math.round(b * 2.55));
             this._state.on = b > 0;
             this._state.brightness = b;
-        } else if (this._profileName === 'rgb') {
-            // Scale existing colour (or white if none set)
-            const base = this._state.color ?? { r: 255, g: 255, b: 255 };
+        } else if (this._hasColorChannels()) {
+            const base  = this._state.color ?? { r: 255, g: 255, b: 255 };
             const scale = b / 100;
-            this._universe.setChannels({
-                [this._address]:     Math.round(base.r * scale),
-                [this._address + 1]: Math.round(base.g * scale),
-                [this._address + 2]: Math.round(base.b * scale),
-            });
+            const update = {};
+            if ('red'   in this._slotOffset) update[this._slotOffset['red']]   = Math.round(base.r * scale);
+            if ('green' in this._slotOffset) update[this._slotOffset['green']] = Math.round(base.g * scale);
+            if ('blue'  in this._slotOffset) update[this._slotOffset['blue']]  = Math.round(base.b * scale);
+            this._universe.setChannels(update);
             this._state.on = b > 0;
             this._state.brightness = b;
         }
     }
 
     _applyOn(brightness) {
-        if (this._profileName === 'dimmer') {
-            this._applyBrightness(brightness);
-        } else if (this._profileName === 'rgb') {
-            const b = clamp(brightness, 0, 100);
-            const base = this._state.color ?? { r: 255, g: 255, b: 255 };
-            const scale = b / 100;
-            this._universe.setChannels({
-                [this._address]:     Math.round(base.r * scale),
-                [this._address + 1]: Math.round(base.g * scale),
-                [this._address + 2]: Math.round(base.b * scale),
-            });
-            this._state.on = true;
-            this._state.brightness = b;
-        }
+        const b = clamp(brightness ?? this._defaultBrightness, 0, 100);
+        // Re-apply defaults (e.g. mode pin for par-7ch) before activating
+        this._applyDefaults();
+        this._applyBrightness(b);
+        this._state.on = b > 0;
     }
 
     _applyBlackout() {
@@ -309,23 +291,44 @@ class DmxAdapter extends AdapterBase {
         this._state.brightness = 0;
     }
 
+    /**
+     * Apply an RGB color value.
+     * - Profiles with a `dimmer` slot: set RGB channels to full intensity values;
+     *   update dimmer only if `brightness` is explicitly in the payload.
+     * - Profiles without `dimmer`: scale RGB channels by brightness.
+     */
     _applyColor(payload) {
         const rgb = parseColor(payload.color);
         if (!rgb) {
             this.publishWarning('DMX_COLOR_INVALID',
                 `Cannot parse color: ${JSON.stringify(payload.color)}. ` +
-                `Provide { r, g, b } or a "#rrggbb" hex string.`);
+                'Provide { r, g, b } or a "#rrggbb" hex string.');
             return;
         }
+
         const b = clamp(payload.brightness ?? this._state.brightness ?? 100, 0, 100);
-        const scale = b / 100;
-        this._universe.setChannels({
-            [this._address]:     Math.round(rgb.r * scale),
-            [this._address + 1]: Math.round(rgb.g * scale),
-            [this._address + 2]: Math.round(rgb.b * scale),
-        });
-        this._state.on     = b > 0;
-        this._state.color  = { r: rgb.r, g: rgb.g, b: rgb.b };
+
+        if ('dimmer' in this._slotOffset) {
+            // Set RGB at full values; master dimmer handles brightness
+            const update = {};
+            if ('red'   in this._slotOffset) update[this._slotOffset['red']]   = rgb.r;
+            if ('green' in this._slotOffset) update[this._slotOffset['green']] = rgb.g;
+            if ('blue'  in this._slotOffset) update[this._slotOffset['blue']]  = rgb.b;
+            if (Object.keys(update).length) this._universe.setChannels(update);
+            if (payload.brightness !== undefined) {
+                this._universe.setChannel(this._slotOffset['dimmer'], Math.round(b * 2.55));
+            }
+        } else {
+            const scale = b / 100;
+            const update = {};
+            if ('red'   in this._slotOffset) update[this._slotOffset['red']]   = Math.round(rgb.r * scale);
+            if ('green' in this._slotOffset) update[this._slotOffset['green']] = Math.round(rgb.g * scale);
+            if ('blue'  in this._slotOffset) update[this._slotOffset['blue']]  = Math.round(rgb.b * scale);
+            if (Object.keys(update).length) this._universe.setChannels(update);
+        }
+
+        this._state.on         = b > 0;
+        this._state.color      = { r: rgb.r, g: rgb.g, b: rgb.b };
         this._state.brightness = b;
     }
 
@@ -341,29 +344,23 @@ class DmxAdapter extends AdapterBase {
             return;
         }
 
-        if (this._profileName === 'dimmer') {
-            this._applyBrightness(scene.brightness ?? 100);
-        } else if (this._profileName === 'rgb') {
-            const b   = clamp(scene.brightness ?? 100, 0, 100);
-            const scale = b / 100;
-            this._universe.setChannels({
-                [this._address]:     Math.round((scene.r ?? 255) * scale),
-                [this._address + 1]: Math.round((scene.g ?? 255) * scale),
-                [this._address + 2]: Math.round((scene.b ?? 255) * scale),
+        const b = clamp(scene.brightness ?? 100, 0, 100);
+
+        if (this._hasColorChannels()) {
+            this._applyColor({
+                color:      { r: scene.r ?? 255, g: scene.g ?? 255, b: scene.b ?? 255 },
+                brightness: b,
             });
-            this._state.on    = b > 0;
-            this._state.color = { r: scene.r ?? 255, g: scene.g ?? 255, b: scene.b ?? 255 };
-            this._state.brightness = b;
+        } else {
+            this._applyBrightness(b);
         }
+
         this._state.scene = sceneName;
         this.publishEvent('scene-activated', { scene: sceneName });
     }
 
-    /**
-     * Publish a warning and throw if the fixture profile does not support a capability.
-     */
     _requireCapability(capability, commandName) {
-        if (!this._profile.capabilities.has(capability)) {
+        if (!this._caps.has(capability)) {
             const msg = `Fixture "${this._profileName}" does not support "${commandName}" (missing capability: ${capability})`;
             this.publishWarning('DMX_CMD_UNSUPPORTED', msg, { command: commandName });
             throw new Error(msg);
@@ -382,17 +379,11 @@ class DmxAdapter extends AdapterBase {
         });
     }
 
-    /**
-     * Parse an optional JSON or key=value scene_map string from the INI.
-     * Returns {} on any parse failure (config-level warning, not a startup error).
-     */
     _parseSceneMap(raw) {
         if (!raw) return {};
         try {
-            // Try JSON first
             return JSON.parse(raw);
         } catch {
-            // Fallback: not supported for scene maps — return empty
             this.logger.warn('DmxAdapter: scene_map could not be parsed as JSON; using default scenes only');
             return {};
         }

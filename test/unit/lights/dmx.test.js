@@ -70,7 +70,7 @@ describe('DmxAdapter — constructor', () => {
 
     it('throws if fixture is unknown', () => {
         expect(() => makeAdapter({ config: { topic: 't', fixture: 'unknown-profile', address: 1 } }))
-            .toThrow(/unknown fixture/);
+            .toThrow(/[Uu]nknown fixture/);
     });
 
     it('throws if address + channel_count > 512', () => {

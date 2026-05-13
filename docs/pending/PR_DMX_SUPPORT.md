@@ -276,21 +276,21 @@ scene_map   = { ... }                    ; optional, reuses Hue/WiZ schema
 - Allow `fixture = custom` plus `channels = dimmer:1,red:2,green:3,blue:4,white:5` in the INI for one-off fixtures without a code change.
 
 ### Profiles to ship in Phase 3
-- [ ] `dimmer` (1 ch) — already shipped Phase 2; move into the library.
-- [ ] `rgb` (3 ch) — already shipped Phase 2; move into the library.
-- [ ] `rgbw` (4 ch)
-- [ ] `rgba` (4 ch)
-- [ ] `rgbaw` (5 ch)
-- [ ] `rgbawuv` (6 ch)
-- [ ] `par-7ch` (common cheap LED par: dimmer, R, G, B, strobe, mode, speed)
-- [ ] `mover-basic` (pan, tilt, dimmer) — minimal, no presets; Phase 6 expands this.
+- [x] `dimmer` (1 ch) — already shipped Phase 2; moved into the library.
+- [x] `rgb` (3 ch) — already shipped Phase 2; moved into the library.
+- [x] `rgbw` (4 ch)
+- [x] `rgba` (4 ch)
+- [x] `rgbaw` (5 ch)
+- [x] `rgbawuv` (6 ch)
+- [x] `par-7ch` (common cheap LED par: dimmer, R, G, B, strobe, mode, speed)
+- [x] `mover-basic` (pan, tilt, dimmer) — minimal, no presets; Phase 6 expands this.
 
 ### Tasks
-- [ ] Define profile schema + validator (`src/dmx/profiles/schema.js`).
-- [ ] Implement profile loader and `fixture = custom` channel-map parser.
-- [ ] Unit tests per profile: channel layout, capability gating, scene mapping.
-- [ ] Doc: `docs/DMX_FIXTURES.md` cataloging built-in profiles, plus a recipe for custom fixtures.
-- [ ] Update `docs/QUICK_START_DMX.md` with a "choose your fixture" section.
+- [x] Define profile schema + validator (`src/dmx/profiles/schema.js`).
+- [x] Implement profile loader and `fixture = custom` channel-map parser.
+- [x] Unit tests per profile: channel layout, capability gating, scene mapping.
+- [x] Doc: `docs/DMX_FIXTURES.md` cataloging built-in profiles, plus a recipe for custom fixtures.
+- [x] Update `docs/QUICK_START_DMX.md` with a "choose your fixture" section.
 
 ### Exit criteria
 - Adding a new common LED par or RGBAWUV light is config-only.
