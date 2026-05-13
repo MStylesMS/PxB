@@ -186,6 +186,8 @@ Light device sections are used for direct network/cloud light backends (`hue`, `
 | `hue_target_id` | string | with `group`/`light` | — | Hue group id or light id for scoped targeting |
 | `scene_map` | string(JSON) | no | built-in defaults | Per-backend scene overrides keyed by scene name |
 | `timeout_s` | int | no | `10` | Request timeout |
+| `fixture` | string | dmx only | — | Fixture profile: `dimmer` or `rgb` (Phase 2); more in Phase 3 |
+| `address` | int | dmx only | `1` | DMX start address for this fixture (1–512) |
 
 `scene_map` lets operators tune scene color matching between vendors without code changes. Example:
 
@@ -203,6 +205,24 @@ scene_map = {"cyan":{"on":true,"r":0,"g":210,"b":255,"brightness":72}}
 `hue_target_type = all` targets the bridge-wide all-lights action. Use
 `group` or `light` with `hue_target_id` to scope the adapter to a Hue room/zone
 group or a single Hue light.
+
+For `backend = dmx` fixtures, pair the `[light:*]` section with a `[dmx]` universe section:
+
+```ini
+[dmx]
+interface = opendmx
+port = /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_B002JE1K-if00-port0
+refresh_hz = 30
+
+[light:stage-rgb]
+backend = dmx
+topic = paradox/houdini/lights/stage-rgb
+fixture = rgb
+address = 1
+brightness = 100
+```
+
+Supported commands and caveats are listed in `docs/MQTT_API.md §9a`.
 
 ## `[light-zone:<label>]`
 

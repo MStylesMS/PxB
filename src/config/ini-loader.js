@@ -298,6 +298,16 @@ function loadConfig(configPath) {
             errors.push(`[${sectionKey}] backend=wiz requires "host"`);
         }
 
+        if (light.backend === 'dmx') {
+            if (!light.fixture) {
+                errors.push(`[${sectionKey}] backend=dmx requires "fixture" (e.g. fixture = dimmer or fixture = rgb)`);
+            }
+            const addr = light.address || 1;
+            if (addr < 1 || addr > 512) {
+                errors.push(`[${sectionKey}] address must be between 1 and 512, got: ${addr}`);
+            }
+        }
+
         if (seenLightTopics.has(light.topic)) {
             errors.push(`[${sectionKey}] topic "${light.topic}" already used by light "${seenLightTopics.get(light.topic)}"`);
         } else {

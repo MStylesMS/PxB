@@ -22,6 +22,7 @@ const { bridgeTopics } = require('./mqtt/contract');
 const HueAdapter = require('./lights/hue');
 const WizAdapter = require('./lights/wiz');
 const LifxAdapter = require('./lights/lifx');
+const DmxAdapter = require('./lights/dmx');
 const ShellyAdapter = require('./switches/shelly');
 const LightZoneAdapter = require('./lights/zone');
 const UnavailableOutputAdapter = require('./adapters/unavailable-output');
@@ -411,6 +412,15 @@ async function main() {
                     break;
                 case 'lifx':
                     adapter = new LifxAdapter({ config: lightConfig, mqttClient: mqtt, logger });
+                    break;
+                case 'dmx':
+                    if (!dmxUniverse) {
+                        throw new Error(
+                            `backend=dmx requires a configured and enabled [dmx] section. ` +
+                            `Add [dmx] to the INI or set enabled = true.`
+                        );
+                    }
+                    adapter = new DmxAdapter({ config: lightConfig, mqttClient: mqtt, logger, universe: dmxUniverse });
                     break;
                 default:
                     throw new Error(`Unsupported light backend: ${lightConfig.backend}`);

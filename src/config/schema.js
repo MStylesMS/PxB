@@ -69,6 +69,9 @@ const SCHEMA = {
         hue_target_id: { required: false, type: 'string' },
         scene_map: { required: false, type: 'string' },
         timeout_s: { required: false, type: 'int', default: 10 },
+        // DMX-specific keys (backend = dmx)
+        fixture: { required: false, type: 'string' },
+        address: { required: false, type: 'int', default: 1 },
     },
     'light-zone': {
         // Light group sections follow pattern [light-zone:group_name]
@@ -97,7 +100,7 @@ const SCHEMA = {
 const VALID_NODE_LABEL = /^[a-z0-9][a-z0-9-]*$/;
 const VALID_RADIOS = new Set(['zwave', 'zigbee']);
 const VALID_TYPES = new Set(['contact', 'relay', 'switch', 'motion', 'custom']);
-const VALID_LIGHT_BACKENDS = new Set(['hue', 'lifx', 'wiz']);
+const VALID_LIGHT_BACKENDS = new Set(['hue', 'lifx', 'wiz', 'dmx']);
 const VALID_HUE_TARGET_TYPES = new Set(['all', 'group', 'light']);
 const VALID_SWITCH_BACKENDS = new Set(['shelly']);
 const VALID_ZONE_TYPES = new Set(['lights', 'switches']);

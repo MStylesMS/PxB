@@ -237,14 +237,14 @@ scene_map   = { ... }                    ; optional, reuses Hue/WiZ schema
 - `LightZoneAdapter` should already work with DMX members without changes; verify with a mixed zone (one DMX + one WiZ).
 
 ### Tasks
-- [ ] Add `'dmx'` to `VALID_LIGHT_BACKENDS` in `src/config/schema.js`.
-- [ ] Extend `SCHEMA.light` with `fixture`, `address`, and validate `address + channel_count - 1 <= 512`.
-- [ ] Add `src/lights/dmx.js` implementing `AdapterBase`.
-- [ ] Update `src/index.js` to inject the shared `DmxUniverse` into `DmxAdapter` and to refuse to start DMX lights when `[dmx]` is absent or disabled (publish init warning, fall through to `UnavailableOutputAdapter`).
-- [ ] Update `docs/MQTT_API.md §9a` with a small "DMX backend caveats" subsection.
-- [ ] Update `docs/CONFIG_INI.md` `[light:<label>]` table to describe `fixture` + `address`.
-- [ ] Add `docs/QUICK_START_DMX.md` following the pattern of `QUICK_START_WIZ.md`.
-- [ ] Unit tests in `test/unit/lights/dmx.test.js`:
+- [x] Add `'dmx'` to `VALID_LIGHT_BACKENDS` in `src/config/schema.js`.
+- [x] Extend `SCHEMA.light` with `fixture`, `address`, and validate `address + channel_count - 1 <= 512`.
+- [x] Add `src/lights/dmx.js` implementing `AdapterBase`.
+- [x] Update `src/index.js` to inject the shared `DmxUniverse` into `DmxAdapter` and to refuse to start DMX lights when `[dmx]` is absent or disabled (publish init warning, fall through to `UnavailableOutputAdapter`).
+- [x] Update `docs/MQTT_API.md §9a` with a small "DMX backend caveats" subsection.
+- [x] Update `docs/CONFIG_INI.md` `[light:<label>]` table to describe `fixture` + `address`.
+- [x] Add `docs/QUICK_START_DMX.md` following the pattern of `QUICK_START_WIZ.md`.
+- [x] Unit tests in `test/unit/lights/dmx.test.js`:
   - Command dispatch table.
   - Channel math for `dimmer` and `rgb` against a mocked universe.
   - `setColorScene` mapped through the built-in scene map.

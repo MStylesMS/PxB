@@ -221,7 +221,7 @@ Unknown commands produce a per-node warning and are ignored.
 
 ## 9a. Light Commands (`{light.topic}/commands`)
 
-For configured light backends (`hue`, `wiz`, `lifx`), PxB accepts light-zone commands on the same Paradox command topic shape:
+For configured light backends (`hue`, `wiz`, `lifx`, `dmx`), PxB accepts light-zone commands on the same Paradox command topic shape:
 
 ```json
 { "command": "scene", "scene": "cyan" }
@@ -248,6 +248,25 @@ Built-in scene names are aligned across Hue/WiZ/LIFX and can be tuned per backen
 PxB fans a command out to each member light adapter, and each adapter should apply
 the supported parts of the request while publishing warnings when the request asks
 for a capability that backend cannot satisfy.
+
+### DMX backend caveats (`backend = dmx`, Phase 2)
+
+The `dmx` backend supports a subset of the light command surface. Unsupported commands
+are **acknowledged with a structured warning** on `{topic}/warnings` and never silently dropped.
+
+| Command | Phase 2 support |
+|---|---|
+| `on`, `allOn`, `off`, `allOff` | ✅ all profiles |
+| `setBrightness` | ✅ all profiles |
+| `setColor` | ✅ `rgb` profile only; warns on `dimmer` |
+| `setColorScene` / `scene` | ✅ all profiles (scenes use default or INI `scene_map`) |
+| `getState` / `getStatus` | ✅ re-publishes retained state |
+| `setColorTemp` | ⚠ unsupported — use `setColor` or a named scene (e.g. `warmWhite`) |
+| `fade` | ⚠ unsupported — use `setBrightness` for immediate level changes |
+
+Warning code for unsupported commands: `DMX_CMD_UNSUPPORTED`.
+
+Built-in fixture profiles for Phase 2: `dimmer` (1 ch), `rgb` (3 ch). Additional profiles land in Phase 3.
 
 ## 10. Per-Node Warnings (`{node.base_topic}/warnings`)
 
