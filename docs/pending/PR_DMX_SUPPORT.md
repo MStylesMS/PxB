@@ -249,7 +249,7 @@ scene_map   = { ... }                    ; optional, reuses Hue/WiZ schema
   - Channel math for `dimmer` and `rgb` against a mocked universe.
   - `setColorScene` mapped through the built-in scene map.
   - Warning published for `setColorTemp` and `fade`.
-- [ ] Manual MQTT test on Pi5: drive the Phase 0 fixture from `mosquitto_pub`, then drive it from PxO via an existing room config.
+- [x] Manual MQTT test on Pi5: drive the Phase 0 fixture from `mosquitto_pub`, then drive it from PxO via an existing room config.
 
 ### Exit criteria
 - Operator can stand up a DMX RGB fixture using config alone.
