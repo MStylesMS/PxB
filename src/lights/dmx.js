@@ -139,8 +139,8 @@ class DmxAdapter extends AdapterBase {
         this._publishState();
 
         // Subscribe to commands
-        await this.mqttClient.subscribe(`${this.config.topic}/commands`, (msg) => {
-            this.safeCall('command', () => this._handleCommand(msg));
+        await this.mqttClient.subscribe(`${this.config.topic}/commands`, (_topic, payload) => {
+            this.safeCall('command', () => this._handleCommand(payload));
         });
         this._subscribed = true;
 

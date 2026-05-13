@@ -86,8 +86,8 @@ class WizAdapter extends AdapterBase {
         }
 
         const commandTopic = `${this.config.topic}/commands`;
-        this.mqttClient.subscribe(commandTopic, (msg) =>
-            this.safeCall('command', () => this._handleCommand(msg)));
+        this.mqttClient.subscribe(commandTopic, (_topic, payload) =>
+            this.safeCall('command', () => this._handleCommand(payload)));
         this._subscribed = true;
 
         this._publishState();
@@ -283,8 +283,8 @@ class WizAdapter extends AdapterBase {
         });
     }
 
-    async _handleCommand(msg) {
-        try { await this.executeCommand(JSON.parse(msg)); }
+    async _handleCommand(payload) {
+        try { await this.executeCommand(typeof payload === 'string' ? JSON.parse(payload) : payload); }
         catch (err) { this.logger.error(`WizAdapter: Failed to parse command: ${err.message}`); }
     }
 

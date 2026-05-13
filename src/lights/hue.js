@@ -116,8 +116,8 @@ class HueAdapter extends AdapterBase {
 
         // Subscribe to command topic
         const commandTopic = `${this.config.topic}/commands`;
-        this.mqttClient.subscribe(commandTopic, (msg) =>
-            this.safeCall('command', () => this._handleCommand(msg)));
+        this.mqttClient.subscribe(commandTopic, (_topic, payload) =>
+            this.safeCall('command', () => this._handleCommand(payload)));
         this._subscribed = true;
         this.logger.info(`HueAdapter: Subscribed to ${commandTopic}`);
 
@@ -754,10 +754,10 @@ class HueAdapter extends AdapterBase {
     /**
      * Handle inbound MQTT command message.
      */
-    async _handleCommand(msg) {
+    async _handleCommand(payload) {
         try {
-            const payload = JSON.parse(msg);
-            await this.executeCommand(payload);
+            const cmd = typeof payload === 'string' ? JSON.parse(payload) : payload;
+            await this.executeCommand(cmd);
         } catch (err) {
             this.logger.error(`HueAdapter: Failed to parse command: ${err.message}`);
         }

@@ -81,8 +81,8 @@ class LifxAdapter extends AdapterBase {
         }
 
         const commandTopic = `${this.config.topic}/commands`;
-        this.mqttClient.subscribe(commandTopic, (msg) =>
-            this.safeCall('command', () => this._handleCommand(msg)));
+        this.mqttClient.subscribe(commandTopic, (_topic, payload) =>
+            this.safeCall('command', () => this._handleCommand(payload)));
         this._subscribed = true;
 
         this._publishState();
@@ -324,9 +324,9 @@ class LifxAdapter extends AdapterBase {
         this.publishState({ type: 'lifx', timestamp: new Date().toISOString(), lights });
     }
 
-    async _handleCommand(msg) {
+    async _handleCommand(payload) {
         try {
-            await this.executeCommand(JSON.parse(msg));
+            await this.executeCommand(typeof payload === 'string' ? JSON.parse(payload) : payload);
         } catch (err) {
             this.logger.error(`LifxAdapter: Failed to parse command: ${err.message}`);
         }

@@ -50,7 +50,8 @@ function makeAdapter(overrides = {}) {
 async function sendCmd(mqtt, payload) {
     const cb = mqtt._subs['paradox/test/lights/dmx1/commands'];
     if (!cb) throw new Error('Adapter not subscribed (call init() first)');
-    await cb(JSON.stringify(payload));
+    // Real dispatcher calls fn(topic, parsedPayload) — pass object, not JSON string
+    await cb('paradox/test/lights/dmx1/commands', payload);
     // Flush async work started inside safeCall (which is not awaited by the cb)
     await new Promise(setImmediate);
 }
