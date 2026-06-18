@@ -18,7 +18,7 @@ PxB runs as a single process that manages one or more radios on a single host. E
 
 ## Paradox Family Context
 
-PxB is one of seven Paradox products. It is designed to **replace direct radio handling in PFx** — PFx consumes PxB over MQTT like any other zone. Family:
+PxB is one of the Paradox products. It is designed to **replace direct radio handling in PFx** — PFx consumes PxB over MQTT like any other zone. Family:
 
 - **PFx** — media/audio/lights/relays controller (Node.js)
 - **PxO** — game orchestration engine (Node.js, EDN)
@@ -26,6 +26,7 @@ PxB is one of seven Paradox products. It is designed to **replace direct radio h
 - **PxT** — player terminal kiosk (Electron)
 - **Pio** — GPIO-to-MQTT bridge (C++)
 - **PxB** — this project, radio-to-MQTT bridge (Node.js)
+- **PxP** — Paradox Prime operator/admin hub (configures & manages this app; not part of a running game)
 
 ## Critical Constraints
 
