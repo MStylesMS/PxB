@@ -16,6 +16,11 @@ PxB is a compact systems-integration project rather than a toy app. It combines:
 ## What It Does
 
 - Connects to Z-Wave and Zigbee USB radios; Zigbee is targeted at Sonoff EFR32MG21 coordinators (Dongle-LMG21 class) on the Ember adapter path.
+- Controls **direct network/cloud light adapters** independently of any radio:
+  - **Philips Hue** — issues commands via the Hue REST v2 API to a local bridge. Supports individual lights, rooms/zones (group target), or bridge-wide all-lights. Profile options: `color`, `ct` (color-temp), `dim`.
+  - **WiZ** — sends UDP control packets directly to WiZ smart bulbs on the LAN. No cloud dependency; bulbs must be reachable by IP.
+  - **LIFX** — issues commands via the LIFX Cloud API. Requires an API token; selector targets all lights on the account.
+- Fans out light commands across mixed-vendor groups via `[light-zone:*]` sections.
 - Publishes a **retained** heartbeat/lifecycle state for the bridge process itself on a fixed interval (default 10s).
 - Publishes **retained on-change** node events and state for contact sensors, relays, etc.
 - Accepts commands over MQTT (pairing, relay control, diagnostics) and an equivalent CLI.
@@ -23,7 +28,7 @@ PxB is a compact systems-integration project rather than a toy app. It combines:
 
 ## Why PxB Exists
 
-PFx was evolving toward direct Z-Wave and Zigbee ownership. That coupled the radio stack lifecycle to the media controller lifecycle, made fault isolation hard, and required PFx to grow into device management territory. PxB takes that responsibility, lets PFx stay focused on media/effects, and gives every other Paradox component (PxO, Web UIs, PxT) a single stable MQTT contract for radio devices.
+PFx was evolving toward direct Z-Wave, Zigbee, and light-adapter ownership. That coupled the radio stack and lighting lifecycle to the media controller lifecycle, made fault isolation hard, and required PFx to grow into device management territory. PxB takes that responsibility, lets PFx stay focused on media/effects, and gives every other Paradox component (PxO, Web UIs, PxT) a single stable MQTT contract for radio devices and lights.
 
 ## Project Status
 

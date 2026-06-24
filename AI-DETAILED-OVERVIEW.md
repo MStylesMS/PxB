@@ -71,12 +71,24 @@ One INI file per PxB process. Sections:
 - `[global]` — log_level, heartbeat_interval (default 10s), discovered_base_topic (default `{base_topic}/pzb/discovered`)
 - `[zwave]` — port (stable serial symlink), network_key (optional, s0/s2), enabled
 - `[zigbee]` — port, adapter, db_path, enabled (phase 3)
-- `[node:<label>]` — one per operator-named device:
+- `[node:<label>]` — one per operator-named radio device:
   - `radio = zwave | zigbee`
   - `node_id = <int>` (Z-Wave) **or** `ieee = 0x...` (Zigbee)
   - `type = contact | motion | relay | switch | dimmer | custom`
   - `base_topic = paradox/<room>/zwave/<label>` (fully operator-controlled)
   - optional: `label`, `description`
+- `[light:<label>]` — one per direct-network light adapter:
+  - `backend = hue | wiz | lifx`
+  - `topic = paradox/<room>/lights/<label>`
+  - Hue: `host` (bridge IP), `api_key` (Hue Application Key), `hue_target_type` (`all`/`group`/`light`), `hue_target_id`, `hue_profile` (`color`/`ct`/`dim`)
+  - WiZ: `host` (bulb IP) — UDP control, no cloud
+  - LIFX: `api_key` (LIFX Cloud token)
+- `[light-zone:<label>]` — fan-out group across multiple `[light:*]` adapters:
+  - `topic = paradox/<room>/lights/<label>`
+  - `devices = <light-label>, <light-label>, ...` (comma-separated)
+- `[switch:<label>]` — one Shelly relay: `backend = shelly`, `host`, `port`
+- `[dmx]` / `[dmx:<label>]` — DMX512 universe output
+- `[effect:<label>]` — DMX effect device (fogger, strobe, hazer)
 
 See [docs/CONFIG_INI.md](docs/CONFIG_INI.md) for full reference.
 

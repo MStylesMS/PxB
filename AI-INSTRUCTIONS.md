@@ -1,6 +1,14 @@
 # Paradox Bridge (PxB) — AI Instructions
 
-PxB is a **Node.js MQTT bridge for Z-Wave, Zigbee, and (future) Thread radios**. It is the sole owner of radio hardware on a Paradox host and exposes a simple, stable MQTT contract for all other Paradox components.
+PxB is a **Node.js MQTT bridge** that owns all direct-hardware integrations on a Paradox host:
+- **Z-Wave / Zigbee / Thread radios** (sole owner of radio serial ports)
+- **Philips Hue** smart lights (Hue REST v2 API via a local Hue bridge)
+- **WiZ** smart bulbs (UDP, LAN-direct, no cloud)
+- **LIFX** smart lights (LIFX Cloud API)
+- **Shelly** relays (HTTP Gen 2)
+- **DMX512** fixtures via OpenDMX or Enttec USB Pro
+
+It exposes a simple, stable MQTT contract for all other Paradox components so that PFx, PxO, and operator UIs never reach hardware directly.
 
 ## Tech Stack
 
@@ -8,7 +16,12 @@ PxB is a **Node.js MQTT bridge for Z-Wave, Zigbee, and (future) Thread radios**.
 - **Z-Wave**: `zwave-js`
 - **Zigbee (planned)**: `zigbee-herdsman`
 - **Thread (future)**: TBD
-- **Config**: INI format with `[mqtt]`, `[global]`, `[zwave]`, `[zigbee]`, `[node:<name>]` sections
+- **Philips Hue**: Hue REST v2 API (local bridge, HTTP)
+- **WiZ**: UDP datagram packets direct to bulb IPs
+- **LIFX**: LIFX Cloud REST API (requires API token)
+- **Shelly**: HTTP Gen 2 REST API
+- **DMX**: `@node-dmx` (OpenDMX) / Enttec USB Pro serial protocol
+- **Config**: INI format with `[mqtt]`, `[global]`, `[zwave]`, `[zigbee]`, `[light:<name>]`, `[light-zone:<name>]`, `[switch:<name>]`, `[effect:<name>]` sections
 - **Transport**: MQTT (shared `paradox/...` topic tree)
 - **Platforms**: Raspberry Pi 3/4/5, desktop Linux
 
