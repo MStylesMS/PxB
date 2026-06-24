@@ -8,7 +8,7 @@ All PxB topics sit under a configurable `base_topic` from `[mqtt]` in the INI. T
 
 ```
 {base_topic}/
-  pzb/
+  pxb/
     state                 retained, periodic (bridge heartbeat/lifecycle)
     commands              not retained (bridge control)
     warnings              not retained (bridge-level warnings)
@@ -29,17 +29,17 @@ The per-node segment is **fully operator-defined** via INI. Example: `paradox/ho
 
 | Topic | Retained | Frequency |
 |-------|:--------:|-----------|
-| `pzb/state` | yes | Every `heartbeat_interval` (default 10s) |
-| `pzb/commands` | no | On demand |
-| `pzb/warnings` | no | On demand |
-| `pzb/discovered/...` | yes | On discovery |
+| `pxb/state` | yes | Every `heartbeat_interval` (default 10s) |
+| `pxb/commands` | no | On demand |
+| `pxb/warnings` | no | On demand |
+| `pxb/discovered/...` | yes | On discovery |
 | `<node>/schema` | yes | **Once at startup** per node (and on driver reconnect) |
 | `<node>/events` | yes | **Only on event** |
 | `<node>/state` | yes | **Only when telemetry changes** (state, battery, reachable, tamper) |
 | `<node>/commands` | no | On demand |
 | `<node>/warnings` | no | On demand |
 
-## 3. Bridge State (`pzb/state`)
+## 3. Bridge State (`pxb/state`)
 
 Retained. Republished every `heartbeat_interval` seconds.
 
@@ -81,7 +81,7 @@ Retained. Republished every `heartbeat_interval` seconds.
 
 Subsystem ids follow the convention `<kind>-<label>`, e.g. `light-mirror`, `switch-fogger`, `zwave-driver`.
 
-## 4. Bridge Commands (`pzb/commands`)
+## 4. Bridge Commands (`pxb/commands`)
 
 Not retained. Payloads:
 
@@ -93,9 +93,9 @@ Not retained. Payloads:
 | `stopExclusion` | `{ "command":"stopExclusion", "radio":"zwave" }` | Exit exclusion mode. |
 | `refreshNode` | `{ "command":"refreshNode", "node_id":3 }` | Re-interview a node. |
 | `removeFailedNode` | `{ "command":"removeFailedNode", "node_id":3 }` | Remove a failed Z-Wave node from the controller. |
-| `getNetworkStatus` | `{ "command":"getNetworkStatus" }` | Force-publish `pzb/state` immediately. |
+| `getNetworkStatus` | `{ "command":"getNetworkStatus" }` | Force-publish `pxb/state` immediately. |
 
-## 5. Bridge Warnings (`pzb/warnings`)
+## 5. Bridge Warnings (`pxb/warnings`)
 
 Not retained. Emitted on operational issues.
 
@@ -119,7 +119,7 @@ Standard codes (fault isolation):
 - `SUBSYSTEM_CRASH` — An optional subsystem threw an uncaught exception or unhandled rejection. The process kept running; the subsystem has been stopped. Payload `context` includes `subsystem_id` (e.g. `light-mirror`) and `kind` (e.g. `output-adapter`). Severity: `error`.
 - `SUBSYSTEM_QUARANTINED` — A subsystem exceeded its crash budget and has been permanently disabled for the lifetime of this process. Payload `context` includes `subsystem_id`, `kind`, `crash_count`, and `window_s`. Severity: `error`.
 
-## 6. Discovery Notices (`pzb/discovered/<radio>/<id>`)
+## 6. Discovery Notices (`pxb/discovered/<radio>/<id>`)
 
 Retained. Emitted when inclusion produces a new node.
 
@@ -142,7 +142,7 @@ Retained. Emitted when inclusion produces a new node.
 }
 ```
 
-A companion INI fragment is also written to `[global] discovered_ini_path` (when configured) and can be retrieved with `pzb dump-ini --node-id N`.
+A companion INI fragment is also written to `[global] discovered_ini_path` (when configured) and can be retrieved with `pxb dump-ini --node-id N`.
 
 ## 7. Per-Node Events (`{node.base_topic}/events`)
 
@@ -184,7 +184,7 @@ Retained. Published once per configured node on PxB startup (and again on Z-Wave
 
 ```json
 {
-  "application": "pzb",
+  "application": "pxb",
   "label": "spell-box",
   "radio": "zwave",
   "type": "contact",
@@ -503,4 +503,4 @@ PFx no longer consumes radio events; Z-Wave / Zigbee I/O is owned entirely by Px
 
 ## 12. Versioning
 
-`pzb/state.version` reflects PxB's semantic version. API-breaking changes require a bump and a migration note in this document.
+`pxb/state.version` reflects PxB's semantic version. API-breaking changes require a bump and a migration note in this document.
