@@ -504,3 +504,134 @@ PFx no longer consumes radio events; Z-Wave / Zigbee I/O is owned entirely by Px
 ## 12. Versioning
 
 `pxb/state.version` reflects PxB's semantic version. API-breaking changes require a bump and a migration note in this document.
+
+---
+
+## 13. MQTT-Native Light Devices
+
+Some Paradox light fixtures speak the Paradox MQTT command protocol **directly** rather than through a backend adapter managed by PxB. The **px-wifi-light-esp8266** (LoLin NodeMCU V3 RGBW controller) is the reference implementation.
+
+These devices:
+- Subscribe to their own `{device_base_topic}/commands` topic and execute light commands autonomously.
+- Publish retained state to `{device_base_topic}/state` on connect, on change, and on a heartbeat (default 10 s).
+- Use the **same command envelope** as §9a, so operators and dashboards send identical payloads regardless of whether the target is a Hue bulb (via PxB) or an ESP8266 (direct).
+
+### 13.1 Device topic layout
+
+Each device has an operator-defined `base_topic` (e.g. `paradox/lights/stage-left`).
+
+| Topic | Direction | Retained | Description |
+|-------|-----------|:--------:|-------------|
+| `{base_topic}/commands` | IN | no | Paradox light command payloads |
+| `{base_topic}/state` | OUT | **yes** | Full device state, heartbeat + on-change |
+| `{base_topic}/events` | OUT | no | Command outcomes |
+| `{base_topic}/warnings` | OUT | no | Validation failures, unknown commands |
+
+### 13.2 Command surface
+
+MQTT-native lights accept the **same commands** as §9a, with the subset below confirmed implemented on px-wifi-light. Unrecognised commands receive a `LIGHT_CMD_UNKNOWN` warning and are ignored; they never crash or block.
+
+| Command | Supported | Notes |
+|---------|:---------:|-------|
+| `on` / `allOn` | ✓ | Defaults to white on if no channels were previously set |
+| `off` / `allOff` | ✓ | All channels to zero; channel values preserved for next `on` |
+| `setColor` | ✓ | `color: "#rrggbb"` or `{r,g,b}`; optional `brightness` |
+| `setBrightness` | ✓ | 0–100; PWM scaler; does not affect white channel |
+| `setColorScene` / `scene` | ✓ | See §13.3 for supported scene names |
+| `getState` / `getStatus` | ✓ | Force-publishes retained state |
+| `identify` | ✓ | 2-second full-white flash then restore |
+| `restart` | ✓ | Schedules firmware reboot |
+| `setColorTemp` | ✗ | Not applicable — no CCT channel; use a warm/cool scene instead |
+| `fade` | ✗ | Not implemented in v0.1 |
+
+### 13.3 Scene names (px-wifi-light)
+
+Scene names are **case-insensitive**. The px-wifi-light maps scenes to its four physical channels (white on/off, R/G/B PWM).
+
+| Scene | White | R | G | B | Brightness |
+|-------|:-----:|---|---|---|:----------:|
+| `off` | off | 0 | 0 | 0 | 100 |
+| `white` / `normal` / `brightWhite` | on | 0 | 0 | 0 | 100 |
+| `softWhite` | on | 0 | 0 | 0 | 50 |
+| `warmWhite` | on | 32 | 8 | 0 | 100 |
+| `dim` | on | 0 | 0 | 0 | 30 |
+| `coolWhite` | off | 80 | 80 | 255 | 100 |
+| `red` | off | 255 | 0 | 0 | 100 |
+| `green` | off | 0 | 255 | 0 | 100 |
+| `blue` | off | 0 | 0 | 255 | 100 |
+| `yellow` | off | 255 | 255 | 0 | 100 |
+| `orange` | off | 255 | 128 | 0 | 100 |
+| `cyan` | off | 0 | 255 | 255 | 100 |
+| `magenta` | off | 255 | 0 | 255 | 100 |
+| `purple` | off | 128 | 0 | 255 | 100 |
+| `pink` | off | 255 | 64 | 128 | 100 |
+
+### 13.4 State payload (`{base_topic}/state`)
+
+Retained. Published on connect, on any output change, and every `heartbeat_interval_ms` (default 10 000 ms).
+
+```json
+{
+  "timestamp": "uptime+1234s",
+  "application": "px-wifi-light-esp8266",
+  "fw_version": "0.1.0",
+  "instance": "px-light-AABB",
+  "uptime_s": 1234,
+  "free_heap": 38192,
+  "on": true,
+  "white": false,
+  "r": 0,
+  "g": 255,
+  "b": 255,
+  "brightness": 100,
+  "scene": "cyan",
+  "wifi": {
+    "sta_connected": true,
+    "ap_ip": "192.168.4.1",
+    "ap_ssid": "px-light-aabb",
+    "ap_clients": 0,
+    "sta_ip": "192.168.1.42",
+    "sta_ssid": "Paradox",
+    "rssi": -58,
+    "mac": "AA:BB:CC:DD:EE:FF",
+    "mdns": "px-light-aabb.local"
+  }
+}
+```
+
+On unclean disconnect the broker delivers a Last-Will tombstone:
+
+```json
+{ "timestamp": "uptime+Ns", "application": "px-wifi-light-esp8266",
+  "instance": "px-light-AABB", "status": "offline" }
+```
+
+### 13.5 Announce (`paradox/props`)
+
+On each MQTT connection the device publishes to the announce topic (configurable, default `paradox/props`):
+
+```json
+{
+  "timestamp": "uptime+Ns",
+  "application": "px-wifi-light-esp8266",
+  "fw_version": "0.1.0",
+  "instance": "px-light-AABB",
+  "base_topic": "paradox/lights/stage-left",
+  "ip": "192.168.1.42",
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "mdns": "px-light-aabb.local"
+}
+```
+
+### 13.6 Warning codes
+
+| Code | Meaning |
+|------|---------|
+| `LIGHT_CMD_UNKNOWN` | `command` name not recognised |
+| `LIGHT_CMD_INVALID` | Required parameter missing or malformed |
+
+### 13.7 Integration with PxB light zones
+
+MQTT-native lights can participate in PxB **light zones** if a future `mqtt` backend adapter is implemented. That adapter would subscribe to the zone's `commands` topic and forward (translate if necessary) each command as-is to the device's `{device_base_topic}/commands` topic. Because the command envelope is identical to §9a, no translation is required — the adapter is a pure passthrough.
+
+Until that adapter exists, operators can target these devices directly from any MQTT client or automation script using the commands in §13.2.
