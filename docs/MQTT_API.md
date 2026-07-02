@@ -509,7 +509,7 @@ PFx no longer consumes radio events; Z-Wave / Zigbee I/O is owned entirely by Px
 
 ## 13. MQTT-Native Light Devices
 
-Some Paradox light fixtures speak the Paradox MQTT command protocol **directly** rather than through a backend adapter managed by PxB. The **px-wifi-light-esp8266** (LoLin NodeMCU V3 RGBW controller) is the reference implementation.
+Some Paradox light fixtures speak the Paradox MQTT command protocol **directly** rather than through a backend adapter managed by PxB. The **px-wifi-light-esp8266** (LoLin NodeMCU V3 RGB+White+UV controller) is the reference implementation.
 
 These devices:
 - Subscribe to their own `{device_base_topic}/commands` topic and execute light commands autonomously.
@@ -536,7 +536,8 @@ MQTT-native lights accept the **same commands** as §9a, with the subset below c
 | `on` / `allOn` | ✓ | Defaults to white on if no channels were previously set |
 | `off` / `allOff` | ✓ | All channels to zero; channel values preserved for next `on` |
 | `setColor` | ✓ | `color: "#rrggbb"` or `{r,g,b}`; optional `brightness` |
-| `setBrightness` | ✓ | 0–100; PWM scaler; does not affect white channel |
+| `setBrightness` | ✓ | 0–100; PWM scaler; does not affect white or UV channels |
+| `setUV` | ✓ | `level` 0–255; independent UV channel, unaffected by on/off/brightness/scenes |
 | `setColorScene` / `scene` | ✓ | See §13.3 for supported scene names |
 | `getState` / `getStatus` | ✓ | Force-publishes retained state |
 | `identify` | ✓ | 2-second full-white flash then restore |
@@ -546,15 +547,15 @@ MQTT-native lights accept the **same commands** as §9a, with the subset below c
 
 ### 13.3 Scene names (px-wifi-light)
 
-Scene names are **case-insensitive**. The px-wifi-light maps scenes to its four physical channels (white on/off, R/G/B PWM).
+Scene names are **case-insensitive**. The px-wifi-light maps scenes to its five physical channels (white on/off, UV PWM, R/G/B PWM). The UV channel is **not** controlled by scenes; it retains its current level regardless of scene changes.
 
 | Scene | White | R | G | B | Brightness |
 |-------|:-----:|---|---|---|:----------:|
 | `off` | off | 0 | 0 | 0 | 100 |
 | `white` / `normal` / `brightWhite` | on | 0 | 0 | 0 | 100 |
-| `softWhite` | on | 0 | 0 | 0 | 50 |
+| `softWhite` | off | 255 | 223 | 223 | 50 |
 | `warmWhite` | on | 32 | 8 | 0 | 100 |
-| `dim` | on | 0 | 0 | 0 | 30 |
+| `dim` | off | 255 | 255 | 255 | 30 |
 | `coolWhite` | off | 80 | 80 | 255 | 100 |
 | `red` | off | 255 | 0 | 0 | 100 |
 | `green` | off | 0 | 255 | 0 | 100 |
@@ -584,6 +585,7 @@ Retained. Published on connect, on any output change, and every `heartbeat_inter
   "g": 255,
   "b": 255,
   "brightness": 100,
+  "uv": 0,
   "scene": "cyan",
   "wifi": {
     "sta_connected": true,
