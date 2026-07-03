@@ -533,17 +533,42 @@ MQTT-native lights accept the **same commands** as §9a, with the subset below c
 
 | Command | Supported | Notes |
 |---------|:---------:|-------|
-| `on` / `allOn` | ✓ | Defaults to white on if no channels were previously set |
-| `off` / `allOff` | ✓ | All channels to zero; channel values preserved for next `on` |
-| `setColor` | ✓ | `color: "#rrggbb"` or `{r,g,b}`; optional `brightness` |
-| `setBrightness` | ✓ | 0–100; PWM scaler; does not affect white or UV channels |
+| `on` / `allOn` | ✓ | Defaults to white on if no channels were previously set; optional `fadeTime` |
+| `off` / `allOff` | ✓ | All channels to zero; channel values preserved for next `on`; optional `fadeTime` |
+| `setColor` | ✓ | `color: "#rrggbb"` or `{r,g,b}`; optional `brightness`, `fadeTime` |
+| `setBrightness` | ✓ | 0–100; PWM scaler; does not affect white or UV channels; optional `fadeTime` |
 | `setUV` | ✓ | `level` 0–255; independent UV channel, unaffected by on/off/brightness/scenes |
-| `setColorScene` / `scene` | ✓ | See §13.3 for supported scene names |
+| `setColorScene` / `scene` | ✓ | See §13.3 for supported scene names; always instant, never faded |
 | `getState` / `getStatus` | ✓ | Force-publishes retained state |
 | `identify` | ✓ | 2-second full-white flash then restore |
 | `restart` | ✓ | Schedules firmware reboot |
 | `setColorTemp` | ✗ | Not applicable — no CCT channel; use a warm/cool scene instead |
-| `fade` | ✗ | Not implemented in v0.1 |
+| `fade` | ✓ | Ramp `brightness` and/or `color` over `fadeTime` seconds (see §13.3a) |
+| `setDefaultFadeTime` | ✓ | Persist the fallback fade duration used when a command omits `fadeTime` (see §13.3a) |
+
+### 13.3a Fade (`fadeTime`)
+
+`on`, `off`, `setBrightness`, `setColor`, and `fade` accept an optional `fadeTime` field — duration in **seconds** (float, e.g. `2.5`).
+
+- If `fadeTime` is present (including explicitly `0`), it always wins — `0` means immediate, no fade.
+- If `fadeTime` is **omitted**, the command falls back to the device's persisted `light.default_fade_time_s` config value. **Default: `1.0` (1 second).** This differs from the DMX backend (§9d), which has no configurable default and always applies instantly when `fadeTime` is omitted — px-wifi-light fades by default because, unlike DMX fixtures, comparable consumer bulbs (Hue, WiZ) apply their own default transition in the device/vendor app rather than requiring the caller to specify one every time.
+
+Change the persisted default with `setDefaultFadeTime` (clamped to 0–60 s), over MQTT or the device's `POST /api/config` (`light.default_fade_time_s`). It saves to `/config.json` immediately (no reboot) and emits a `default-fade-time-updated` event with the new value.
+
+```json
+{ "command": "setDefaultFadeTime", "fadeTime": 2 }
+```
+
+Only brightness and RGB are interpolated, at ~30 Hz. The white channel is a digital on/off MOSFET (not PWM) and switches instantly at the start of the fade rather than dimming. Sending any new command while a fade is in progress cancels it immediately and starts the new transition from the live in-progress values — it never finishes the original fade first (identical cancel-and-restart semantics to the DMX backend). A faded `off` still preserves the pre-fade brightness for the next `on`.
+
+```json
+{ "command": "fade", "brightness": 40, "fadeTime": 3 }
+{ "command": "off", "fadeTime": 2.5 }
+{ "command": "setColor", "color": "#ff8000", "brightness": 80, "fadeTime": 1.5 }
+{ "command": "setColor", "color": "#00dcff", "brightness": 100 }
+```
+
+The last example omits `fadeTime` entirely, so it fades over the persisted default (1 s unless changed via `setDefaultFadeTime`).
 
 ### 13.3 Scene names (px-wifi-light)
 
@@ -587,6 +612,8 @@ Retained. Published on connect, on any output change, and every `heartbeat_inter
   "brightness": 100,
   "uv": 0,
   "scene": "cyan",
+  "fading": false,
+  "default_fade_time_s": 1.0,
   "wifi": {
     "sta_connected": true,
     "ap_ip": "192.168.4.1",
