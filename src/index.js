@@ -24,6 +24,7 @@ const WizAdapter = require('./lights/wiz');
 const LifxAdapter = require('./lights/lifx');
 const DmxAdapter = require('./lights/dmx');
 const ShellyAdapter = require('./switches/shelly');
+const WizPlugAdapter = require('./switches/wiz-plug');
 const DmxEffectAdapter = require('./effects/dmx');
 const LightZoneAdapter = require('./lights/zone');
 const UnavailableOutputAdapter = require('./adapters/unavailable-output');
@@ -559,6 +560,9 @@ async function main() {
             switch (switchConfig.backend) {
                 case 'shelly':
                     adapter = new ShellyAdapter({ config: switchConfig, mqttClient: mqtt, logger });
+                    break;
+                case 'wiz':
+                    adapter = new WizPlugAdapter({ config: switchConfig, mqttClient: mqtt, logger });
                     break;
                 default:
                     throw new Error(`Unsupported switch backend: ${switchConfig.backend}`);

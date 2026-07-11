@@ -17,7 +17,7 @@ PxB is configured by a single INI file. Pass the path via `--config` or default 
 | `[node:<label>]` | One configured device | 0–N |
 | `[light:<label>]` | One light fixture / Hue bridge / WiZ / LIFX device | 0–N |
 | `[light-zone:<label>]` | Fan-out group across multiple lights | 0–N |
-| `[switch:<label>]` | One Shelly relay | 0–N |
+| `[switch:<label>]` | One relay/plug (Shelly or WiZ smart plug) | 0–N |
 | `[effect:<label>]` | One DMX effect device (fogger / strobe / hazer) | 0–N |
 
 ## `[mqtt]`
@@ -344,3 +344,37 @@ devices = hue-room,wiz-desk
 Light zones may mix vendors. PxB fans commands out to each member adapter and
 expects each backend to apply the parts it supports while publishing warnings for
 unsupported requests.
+
+## `[switch:<label>]`
+
+Switch sections describe relay/plug output devices. Both a `shelly` HTTP relay
+and a `wiz` smart plug (UDP LAN, same protocol family as WiZ bulbs but on/off
+only) share the same switch command vocabulary (`setRelay`, `pulse`, `allOn`,
+`allOff`).
+
+| Key | Type | Required | Default | Description |
+|-----|------|:--------:|---------|-------------|
+| `backend` | string | yes | — | `shelly` \| `wiz` |
+| `topic` | string | yes | — | Switch topic root for `{commands,state,warnings,events}` |
+| `host` | string | yes | — | Device IP address |
+| `port` | int | no | backend default | HTTP port for `shelly` (80), UDP port for `wiz` (38899) |
+| `timeout_s` | int | no | `10` | Per-request timeout |
+
+WiZ smart plugs are single-channel, so relay channel `0` is always used;
+a `channel` value in a command payload is accepted but ignored (with a warning).
+
+Example:
+
+```ini
+[switch:shelly-main]
+backend   = shelly
+topic     = paradox/houdini/switches/shelly-main
+host      = 10.0.0.151
+
+[switch:wiz-fan]
+backend   = wiz
+topic     = paradox/houdini/switches/wiz-fan
+host      = 10.0.0.131
+```
+
+See `docs/QUICK_START_SHELLY.md` and `docs/QUICK_START_WIZ_PLUG.md`.

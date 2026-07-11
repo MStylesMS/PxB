@@ -379,4 +379,37 @@ host = 192.168.1.50
     expect(cfg.switches['relay-1'].backend).toBe('shelly');
     expect(cfg.switches['relay-1'].host).toBe('192.168.1.50');
   });
+
+  test('parses [switch:*] wiz plug sections', () => {
+    const f = writeTempIni(`
+[mqtt]
+broker = localhost
+client_id = test
+base_topic = paradox/test
+
+[switch:wiz-plug-1]
+backend = wiz
+topic = paradox/test/switch/wiz-plug-1
+host = 192.168.1.130
+`);
+
+    const cfg = loadConfig(f);
+    expect(cfg.switches['wiz-plug-1'].backend).toBe('wiz');
+    expect(cfg.switches['wiz-plug-1'].host).toBe('192.168.1.130');
+  });
+
+  test('rejects wiz plug switch without host', () => {
+    const f = writeTempIni(`
+[mqtt]
+broker = localhost
+client_id = test
+base_topic = paradox/test
+
+[switch:wiz-plug-1]
+backend = wiz
+topic = paradox/test/switch/wiz-plug-1
+`);
+
+    expect(() => loadConfig(f)).toThrow('backend=wiz requires "host"');
+  });
 });

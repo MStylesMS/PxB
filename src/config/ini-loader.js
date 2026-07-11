@@ -427,6 +427,10 @@ function loadConfig(configPath) {
             errors.push(`[${sectionKey}] backend=shelly requires "host"`);
         }
 
+        if (sw.backend === 'wiz' && !sw.host) {
+            errors.push(`[${sectionKey}] backend=wiz requires "host"`);
+        }
+
         sw.label = label;
         config.switches[label] = sw;
     }

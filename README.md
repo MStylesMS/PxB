@@ -19,6 +19,7 @@ PxB is a compact systems-integration project rather than a toy app. It combines:
 - Controls **direct network/cloud light adapters** independently of any radio:
   - **Philips Hue** — issues commands via the Hue REST v2 API to a local bridge. Supports individual lights, rooms/zones (group target), or bridge-wide all-lights. Profile options: `color`, `ct` (color-temp), `dim`.
   - **WiZ** — sends UDP control packets directly to WiZ smart bulbs on the LAN. No cloud dependency; bulbs must be reachable by IP.
+- Controls **WiZ smart plugs** as on/off switches via `[switch:*]` (`backend = wiz`), using the same UDP LAN protocol. No cloud dependency.
   - **LIFX** — issues commands via the LIFX Cloud API. Requires an API token; selector targets all lights on the account.
 - Fans out light commands across mixed-vendor groups via `[light-zone:*]` sections.
 - Publishes a **retained** heartbeat/lifecycle state for the bridge process itself on a fixed interval (default 10s).
