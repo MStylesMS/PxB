@@ -73,8 +73,9 @@ mosquitto_pub -t paradox/houdini/switches/wiz-fan/commands \
 mosquitto_sub -v -t 'paradox/houdini/switches/wiz-fan/#'
 ```
 
-State payloads report `type: "wiz-plug"`, a connectivity `status`, and the
-single-channel relay list, e.g. `{"relays":[{"id":0,"on":true}]}`.
+State payloads report `type: "wiz-plug"`, a connectivity `status`, a top-level
+`state` of `"on"` or `"off"` (channel 0), and the single-channel relay list,
+e.g. `{"state":"on","relays":[{"id":0,"on":true}]}`.
 
 ## 5. Notes
 

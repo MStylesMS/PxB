@@ -172,12 +172,18 @@ class WizPlugAdapter extends AdapterBase {
         return [{ id: 0, on: r ? r.state === true : false }];
     }
 
+    _relayStateToken() {
+        const first = Array.isArray(this.relays) && this.relays[0];
+        return first && first.on === true ? 'on' : 'off';
+    }
+
     _publishState() {
         this.publishState({
             type: 'wiz-plug',
             status: this._connectivity === 'degraded' ? 'degraded' : 'online',
             host: this.host,
             timestamp: new Date().toISOString(),
+            state: this._relayStateToken(),
             relays: this.relays,
         });
     }
@@ -190,6 +196,7 @@ class WizPlugAdapter extends AdapterBase {
             host: this.host,
             reason,
             timestamp: new Date().toISOString(),
+            state: this._relayStateToken(),
             relays: this.relays,
         });
     }

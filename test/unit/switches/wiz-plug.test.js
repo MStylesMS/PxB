@@ -104,6 +104,35 @@ describe('WizPlugAdapter', () => {
         });
     });
 
+    describe('_publishState', () => {
+        it('should include top-level state on|off from relays[0]', () => {
+            adapter = new WizPlugAdapter({ config, mqttClient: mockMqtt, logger: mockLogger });
+            adapter.relays = [{ id: 0, on: true }];
+            adapter._publishState();
+            expect(mockMqtt.publish).toHaveBeenCalledWith(
+                expect.stringContaining('/state'),
+                expect.stringMatching(/"state"\s*:\s*"on"/),
+                expect.any(Object)
+            );
+            expect(mockMqtt.publish).toHaveBeenCalledWith(
+                expect.stringContaining('/state'),
+                expect.stringMatching(/"relays"/),
+                expect.any(Object)
+            );
+        });
+
+        it('should publish state off when channel 0 is off', () => {
+            adapter = new WizPlugAdapter({ config, mqttClient: mockMqtt, logger: mockLogger });
+            adapter.relays = [{ id: 0, on: false }];
+            adapter._publishState();
+            expect(mockMqtt.publish).toHaveBeenCalledWith(
+                expect.stringContaining('/state'),
+                expect.stringMatching(/"state"\s*:\s*"off"/),
+                expect.any(Object)
+            );
+        });
+    });
+
     describe('executeCommand', () => {
         beforeEach(() => {
             adapter = new WizPlugAdapter({ config, mqttClient: mockMqtt, logger: mockLogger });

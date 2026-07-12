@@ -197,12 +197,18 @@ class ShellyAdapter extends AdapterBase {
         }
     }
 
+    _relayStateToken() {
+        const first = Array.isArray(this.relays) && this.relays[0];
+        return first && first.on === true ? 'on' : 'off';
+    }
+
     _publishState() {
         this.publishState({
             type: 'shelly',
             host: this.host,
             gen: this.gen || 1,
             timestamp: new Date().toISOString(),
+            state: this._relayStateToken(),
             relays: this.relays,
         });
     }

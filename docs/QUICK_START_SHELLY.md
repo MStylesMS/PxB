@@ -71,7 +71,8 @@ mosquitto_pub -t paradox/houdini/switches/shelly-main/commands \
 mosquitto_sub -v -t 'paradox/houdini/switches/shelly-main/#'
 ```
 
-State payloads include the detected generation and current relay list.
+State payloads include the detected generation, a top-level `state` of `"on"` or
+`"off"` (from channel 0), and the current relay list.
 
 ## 5. Notes
 
