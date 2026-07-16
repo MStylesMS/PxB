@@ -12,7 +12,7 @@ It exposes a simple, stable MQTT contract for all other Paradox components so th
 
 ## Tech Stack
 
-- **Runtime**: Node.js 18+
+- **Runtime**: Node.js **24 LTS** (Active). Develop and deploy against Node 24. Existing installs on Node 18/20 must be upgraded to Node 24 LTS before running current app versions.
 - **Z-Wave**: `zwave-js`
 - **Zigbee (planned)**: `zigbee-herdsman`
 - **Thread (future)**: TBD
