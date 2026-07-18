@@ -6,6 +6,7 @@ logs/
 .env.*
 cache/
 .vscode/
+.lsp/
 .DS_Store
 coverage/
 dist/
