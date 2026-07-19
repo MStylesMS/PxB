@@ -61,7 +61,7 @@ PxB is one product in a set that composes a full escape-room stack:
 - **PxO** — game orchestration engine
 - **PxC** — configurable clock application framework
 - **PxT** — player terminal kiosk
-- **Pio** — GPIO-to-MQTT bridge
+- **PxIO** — GPIO-to-MQTT bridge
 - **PxB** — Z-Wave / Zigbee / Thread bridge (this project)
 
 All components share the same MQTT topic convention: `{baseTopic}/{commands|events|state|warnings}`.

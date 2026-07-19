@@ -37,7 +37,7 @@ PxB is one of the Paradox products. It is designed to **replace direct radio han
 - **PxO** — game orchestration engine (Node.js, EDN)
 - **PxC** — configurable clock apps (React build system)
 - **PxT** — player terminal kiosk (Electron)
-- **Pio** — GPIO-to-MQTT bridge (C++)
+- **PxIO** — GPIO-to-MQTT bridge (C++)
 - **PxB** — this project, radio-to-MQTT bridge (Node.js)
 - **PxP** — Paradox Prime operator/admin hub (configures & manages this app; not part of a running game)
 
