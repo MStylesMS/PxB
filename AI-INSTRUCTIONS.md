@@ -1,4 +1,4 @@
-# Paradox Bridge (PxB) — AI Instructions
+# Paradox Bridge (PxB) â€” AI Instructions
 
 PxB is a **Node.js MQTT bridge** that owns all direct-hardware integrations on a Paradox host:
 - **Z-Wave / Zigbee / Thread radios** (sole owner of radio serial ports)
@@ -31,27 +31,27 @@ PxB runs as a single process that manages one or more radios on a single host. E
 
 ## Paradox Family Context
 
-PxB is one of the Paradox products. It is designed to **replace direct radio handling in PFx** — PFx consumes PxB over MQTT like any other zone. Family:
+PxB is one of the Paradox products. It is designed to **replace direct radio handling in PFx** â€” PFx consumes PxB over MQTT like any other zone. Family:
 
-- **PFx** — media/audio/lights/relays controller (Node.js)
-- **PxO** — game orchestration engine (Node.js, EDN)
-- **PxC** — configurable clock apps (React build system)
-- **PxT** — player terminal kiosk (Electron)
-- **PxIO** — GPIO-to-MQTT bridge (C++)
-- **PxB** — this project, radio-to-MQTT bridge (Node.js)
-- **PxP** — Paradox Prime operator/admin hub (configures & manages this app; not part of a running game)
+- **PFx** â€” media/audio/lights/relays controller (Node.js)
+- **PxO** â€” game orchestration engine (Node.js, EDN)
+- **PxC** â€” configurable clock apps (React build system)
+- **PxT** â€” player terminal kiosk (Electron)
+- **PxIO** â€” GPIO-to-MQTT bridge (C++)
+- **PxB** â€” this project, radio-to-MQTT bridge (Node.js)
+- **PxP** â€” Paradox Prime operator/admin hub (configures & manages this app; not part of a running game)
 
 ## Critical Constraints
 
 - **MQTT topic structure is sacred**: `{baseTopic}/{commands|events|state|warnings}`
-- **Per-node base topic is operator-defined** in INI — PxB does not force a fixed `<base>/zwave/<nodeid>/…` tree
+- **Per-node base topic is operator-defined** in INI â€” PxB does not force a fixed `<base>/zwave/<nodeid>/â€¦` tree
 - **Retention rules**:
   - Bridge state/lifecycle heartbeat: retained, periodic (default 10s)
   - Node events: retained, on-change only
   - Node state: retained, on-change only
 - **Event payload must match the PFx InputZone contract**: `{input, event, source: "zwave-node-<n>"|"zigbee-<ieee>", ts, raw}`
 - **Single-writer to radio**: PxB is the only process that opens the radio serial port. PFx direct-radio backends must be retired as PxB comes online.
-- **Discovered-but-unconfigured nodes** get a generated INI fragment with placeholders — PxB does not silently start publishing under a guessed topic without operator confirmation (except under a clearly marked `discovered/` prefix).
+- **Discovered-but-unconfigured nodes** get a generated INI fragment with placeholders â€” PxB does not silently start publishing under a guessed topic without operator confirmation (except under a clearly marked `discovered/` prefix).
 - **Generic light zones stay generic**: mixed-vendor `[light-zone:*]` groups are allowed. Do not add vendor-specific grouping layers unless the hardware contract truly requires them.
 - **Best-effort light capability handling**: adapters should apply the parts of a light command they support and publish a warning when asked for an unsupported capability. Do not block mixed-vendor grouping on cross-backend normalization work.
 - **Do not leave dormant feature scaffolding**: if passthrough routing or aggregator behavior is not shipping, remove the dead code/docs instead of parking half-wired abstractions in the repo.
@@ -74,5 +74,9 @@ Before significant changes, review [docs/SPEC.md](docs/SPEC.md) and [docs/MQTT_A
 | [docs/QUICK_START.md](docs/QUICK_START.md) | Install / first run |
 | [docs/PR_PZB_INITIAL.md](docs/PR_PZB_INITIAL.md) | Phased implementation plan |
 | [README.md](README.md) | User-facing overview |
-| [docs/PR_FAULT_ISOLATION.md](docs/PR_FAULT_ISOLATION.md) | Subsystem fault isolation design — crash budget, cooldown, quarantine |
+| [docs/PR_FAULT_ISOLATION.md](docs/PR_FAULT_ISOLATION.md) | Subsystem fault isolation design â€” crash budget, cooldown, quarantine |
 | Parent system: [/opt/paradox/AI-INSTRUCTIONS.md](/opt/paradox/AI-INSTRUCTIONS.md) | System-wide context (when present) |
+
+## Suite standards
+
+Suite-wide contracts live in [../PxH/docs/standards/](../PxH/docs/standards/) (folder, not a single file). Read those before changing MQTT topics or shared conventions. If you change a standard, update the file under PxH `docs/standards/` first and propagate to other repos' docs in the same work.
