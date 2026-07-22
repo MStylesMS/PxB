@@ -68,7 +68,7 @@ test/
 One INI file per PxB process. Sections:
 
 - `[mqtt]` — broker, port, credentials, base_topic, client_id
-- `[global]` — log_level, heartbeat_interval (default 10s), discovered_base_topic (default `{base_topic}/pzb/discovered`)
+- `[global]` — log_level, heartbeat_interval (default 10s), discovered_base_topic (default `{base_topic}/pxb/discovered`)
 - `[zwave]` — port (stable serial symlink), network_key (optional, s0/s2), enabled
 - `[zigbee]` — port, adapter, db_path, enabled (phase 3)
 - `[node:<label>]` — one per operator-named radio device:
@@ -101,10 +101,10 @@ Per configured node:
 - `{base_topic}/warnings` — per-node warnings (not retained)
 
 Bridge-level:
-- `{base_topic}/pzb/state` — retained heartbeat every `heartbeat_interval` seconds
-- `{base_topic}/pzb/commands` — bridge-level commands (inclusion, diagnostics)
-- `{base_topic}/pzb/warnings` — bridge-level warnings (radio disconnect, driver errors)
-- `{base_topic}/pzb/discovered/<radio>/<id>` — retained discovery notices for unconfigured nodes
+- `{base_topic}/pxb/state` — retained heartbeat every `heartbeat_interval` seconds
+- `{base_topic}/pxb/commands` — bridge-level commands (inclusion, diagnostics)
+- `{base_topic}/pxb/warnings` — bridge-level warnings (radio disconnect, driver errors)
+- `{base_topic}/pxb/discovered/<radio>/<id>` — retained discovery notices for unconfigured nodes
 
 Event payload (matches PFx InputZone):
 
@@ -122,11 +122,11 @@ Full detail in [docs/MQTT_API.md](docs/MQTT_API.md).
 
 ## Pairing / Discovery Flow
 
-1. Operator sends `{"command":"startInclusion"}` on `{base_topic}/pzb/commands` (or runs `pzb include --label spell-box`).
-2. PxB enters inclusion mode and publishes progress on `{base_topic}/pzb/state` (phase: `including`).
+1. Operator sends `{"command":"startInclusion"}` on `{base_topic}/pxb/commands` (or runs `pzb include --label spell-box`).
+2. PxB enters inclusion mode and publishes progress on `{base_topic}/pxb/state` (phase: `including`).
 3. Operator triggers the device to join (physical button / magnet tap).
 4. PxB completes interview, assigns a default label (`discovered-<nodeId>` if none provided) and:
-   - publishes a discovery notice on `{base_topic}/pzb/discovered/zwave/<nodeId>`
+   - publishes a discovery notice on `{base_topic}/pxb/discovered/zwave/<nodeId>`
    - writes a generated INI fragment to stdout + a discovery sidecar file
    - keeps the node in-memory for the session so basic events are observable
 5. Operator copies the INI fragment into the main config, adjusts `base_topic`/`type`, restarts PxB.
@@ -182,7 +182,7 @@ Subsystem status values: `ok | crashed | cooling-down | quarantined | fatal`. Se
 
 ## Command Surface (initial)
 
-Bridge-level (`{base_topic}/pzb/commands`):
+Bridge-level (`{base_topic}/pxb/commands`):
 - `startInclusion` / `stopInclusion`
 - `startExclusion` / `stopExclusion`
 - `refreshNode {label|node_id}`
@@ -195,7 +195,7 @@ Node-level (`{base_topic:node}/commands`) for outputs:
 
 ## Lifecycle & Failure Semantics
 
-- Missing serial port at startup → publish `pzb/state` with `state: error`, exit with non-zero so systemd restarts.
+- Missing serial port at startup → publish `pxb/state` with `state: error`, exit with non-zero so systemd restarts.
 - Radio disconnect at runtime → `state: degraded`, attempt reconnect with backoff; publish warnings.
 - Node reports failed → mark in registry; publish warning; keep trying until `removeFailedNode`.
 - Graceful shutdown on SIGTERM: stop inclusion, close driver, publish `state: stopping`, disconnect MQTT last.

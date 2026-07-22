@@ -56,14 +56,14 @@ node src/cli/index.js include --radio zigbee --timeout-s 90 --config /opt/parado
 MQTT:
 
 ```bash
-mosquitto_pub -t paradox/houdini/pzb/commands \
+mosquitto_pub -t paradox/houdini/pxb/commands \
   -m '{"command":"startInclusion","radio":"zigbee","timeout_s":90}'
 ```
 
 Promote the discovered fragment from:
 
 ```text
-paradox/houdini/pzb/discovered/zigbee/<ieee-tail>
+paradox/houdini/pxb/discovered/zigbee/<ieee-tail>
 ```
 
 into a named `[node:*]` section once you know the final topic and type.

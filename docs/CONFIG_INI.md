@@ -2,7 +2,7 @@
 
 **Status:** Draft v0.1.
 
-PxB is configured by a single INI file. Pass the path via `--config` or default location `/etc/pzb/pzb.ini`.
+PxB is configured by a single INI file. Pass the path via `--config` or default location `/etc/pxb/pzb.ini`.
 
 ## Section Overview
 
@@ -40,7 +40,7 @@ PxB is configured by a single INI file. Pass the path via `--config` or default 
 | `log_level` | string | no | `info` | `error|warn|info|debug|trace` |
 | `log_directory` | path | no | — | If set, write logs here (with rotation) |
 | `heartbeat_interval` | int (s) | no | `10` | Bridge status republish interval |
-| `discovered_base_topic` | string | no | `{base_topic}/pzb/discovered` | Where discovery notices go |
+| `discovered_base_topic` | string | no | `{base_topic}/pxb/discovered` | Where discovery notices go |
 | `discovered_ini_path` | path | no | next to main config | Where INI fragments for new nodes are written |
 | `default_discovered_label_prefix` | string | no | `discovered-` | Prefix for auto-assigned labels |
 

@@ -79,10 +79,10 @@ node src/index.js --config /opt/paradox/config/pzb.ini
 Watch the bridge status:
 
 ```bash
-mosquitto_sub -v -t 'paradox/houdini/pzb/#'
+mosquitto_sub -v -t 'paradox/houdini/pxb/#'
 ```
 
-You should see a retained `pzb/state` message within 10 seconds.
+You should see a retained `pxb/state` message within 10 seconds.
 
 ## 5. CLI Commands (Phase 1)
 
@@ -107,11 +107,11 @@ pzb list-nodes --config /opt/paradox/config/pzb.ini
 ## 6. Force a Status Publish (MQTT Command)
 
 ```bash
-mosquitto_pub -t paradox/houdini/pzb/commands \
+mosquitto_pub -t paradox/houdini/pxb/commands \
   -m '{"command":"getNetworkStatus"}'
 ```
 
-PxB will immediately re-publish the current `pzb/state` payload.
+PxB will immediately re-publish the current `pxb/state` payload.
 
 ## 7. Verify Contact Sensor Events
 
@@ -147,17 +147,17 @@ have a specific reason to use S0 / S2, leave `strategy` unset.
 
 ```bash
 # Start inclusion (Insecure — default)
-mosquitto_pub -t paradox/houdini/pzb/commands \
+mosquitto_pub -t paradox/houdini/pxb/commands \
   -m '{"command":"startInclusion","radio":"zwave"}'
 
 # Then perform the device's pairing gesture (typically 3 quick presses).
 
 # Stop early if needed
-mosquitto_pub -t paradox/houdini/pzb/commands \
+mosquitto_pub -t paradox/houdini/pxb/commands \
   -m '{"command":"stopInclusion","radio":"zwave"}'
 
 # Exclude a node (same gesture during exclusion window)
-mosquitto_pub -t paradox/houdini/pzb/commands \
+mosquitto_pub -t paradox/houdini/pxb/commands \
   -m '{"command":"startExclusion","radio":"zwave"}'
 ```
 
@@ -170,7 +170,7 @@ Optional overrides (advanced; only use if you have a reason):
 {"command":"startInclusion","radio":"zwave","timeout_s":120}
 ```
 
-On success PxB publishes a `paradox/<base>/pzb/discovered/zwave/<node_id>` message
+On success PxB publishes a `paradox/<base>/pxb/discovered/zwave/<node_id>` message
 with a ready-to-paste INI fragment.
 
 ## 9. Install as a Systemd Service
@@ -211,7 +211,7 @@ sudo usermod -aG dialout paradox
 | Symptom | Check |
 |---------|-------|
 | `Config file not found` | Verify `--config` path is absolute or correct relative path |
-| `pzb/state` never appears | Confirm `broker` and `base_topic` in INI match what you subscribe to |
+| `pxb/state` never appears | Confirm `broker` and `base_topic` in INI match what you subscribe to |
 | Z-Wave driver fails to start | Check `port` path exists and the user has read/write access |
 | Node events missing | Confirm `node_id` in INI matches the Z-Wave controller's assignment |
 | `ZWAVE_DRIVER_ERROR` warnings | Non-fatal; driver will reconnect with exponential backoff |

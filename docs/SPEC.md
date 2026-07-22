@@ -75,10 +75,10 @@ See [CONFIG_INI.md](CONFIG_INI.md) for full key list.
 See [MQTT_API.md](MQTT_API.md) for canonical definitions. Summary:
 
 - Per node: `{base_topic}/events`, `/state`, `/schema`, `/commands`, `/warnings`.
-- Bridge: `{base_topic}/pzb/state`, `/commands`, `/warnings`, `/discovered/<radio>/<id>`.
+- Bridge: `{base_topic}/pxb/state`, `/commands`, `/warnings`, `/discovered/<radio>/<id>`.
 
 Retention rules:
-- Bridge `pzb/state`: **retained**, periodic (default 10s).
+- Bridge `pxb/state`: **retained**, periodic (default 10s).
 - Node `events`: **retained**, published only when an event occurs.
 - Node `state`: **retained**, published only when telemetry changes (state, battery, reachable, tamper).
 - Node `schema`: **retained**, published once at PxB startup (and on driver reconnect).
@@ -126,7 +126,7 @@ See [AI-DETAILED-OVERVIEW.md](../AI-DETAILED-OVERVIEW.md#heartbeat--bridge-statu
 
 ## 13. Command Surface (Phase 1)
 
-**Bridge commands** (`{base_topic}/pzb/commands`):
+**Bridge commands** (`{base_topic}/pxb/commands`):
 - `startInclusion`
 - `stopInclusion`
 - `startExclusion`
@@ -144,10 +144,10 @@ All commands must be accepted both via MQTT JSON and via the equivalent CLI (`pz
 ## 14. Discovery / Pairing
 
 1. Operator starts inclusion via MQTT or `pzb include [--label <name>]`.
-2. Bridge enters `including` state, reflected in `pzb/state`.
+2. Bridge enters `including` state, reflected in `pxb/state`.
 3. When a node joins, PxB interviews it.
 4. On successful interview:
-   - Retained discovery notice published on `{base_topic}/pzb/discovered/<radio>/<id>`.
+   - Retained discovery notice published on `{base_topic}/pxb/discovered/<radio>/<id>`.
    - INI fragment emitted to stdout and appended to `discovered.ini` sidecar next to the main config.
    - Node is held in runtime registry so events are observable under a `discovered-<n>` label.
 5. Operator edits INI (sets `base_topic`, `type`, `label`) and restarts PxB.
