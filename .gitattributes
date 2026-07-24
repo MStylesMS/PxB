@@ -1,0 +1,6 @@
+# Paradox suite: LF in repo and working tree (Raspberry Pi / Linux hosts).
+* text=auto eol=lf
+
+# Windows batch/cmd launchers only — CRLF when run natively on Windows.
+*.bat text eol=crlf
+*.cmd text eol=crlf
