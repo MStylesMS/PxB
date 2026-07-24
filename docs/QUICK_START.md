@@ -20,7 +20,7 @@ cd /opt/paradox/apps/PxB
 npm install
 ```
 
-> **Requires Node.js 18+ and a working zwave-js-compatible USB stick.**
+> **Requires Node.js 24 LTS and a working zwave-js-compatible USB stick.**
 
 ## 2. Identify Your Radio
 
